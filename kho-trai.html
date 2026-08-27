@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kho Giá — Tính khổ trải</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --bg:#F6F6F4;
+    --surface:#FFFFFF;
+    --surface-alt:#FBFBFA;
+    --ink:#1B1F22;
+    --ink-soft:#666F76;
+    --ink-faint:#9AA1A6;
+    --red:#C0392B;
+    --red-dark:#8F2A1F;
+    --red-tint:#FCEEEC;
+    --line:#E7E5E1;
+    --line-strong:#D9D6D0;
+    --white:#FFFFFF;
+    --shadow-sm:0 1px 2px rgba(20,18,16,.05);
+    --shadow-md:0 2px 6px rgba(20,18,16,.06), 0 8px 24px rgba(20,18,16,.06);
+    --radius:8px;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:'Inter', sans-serif; -webkit-font-smoothing:antialiased; }
+  .app{ max-width:960px; margin:0 auto; padding:28px 20px 70px; }
+
+  /* ---------- HEADER ---------- */
+  .header{ display:flex; align-items:center; gap:12px; padding-bottom:18px; margin-bottom:22px; position:relative; }
+  .logo-home{ display:flex; align-items:center; gap:12px; cursor:pointer; border-radius:8px; padding:4px 6px; margin:-4px -6px; transition:background .15s; }
+  .logo-home:hover{ background:var(--surface-alt); }
+  .logo-home:active{ transform:translateY(1px); }
+  .header .mark-icon{ flex-shrink:0; width:34px; height:34px; }
+  .header .mark-icon svg{ width:100%; height:100%; display:block; }
+  .header h1{ font-family:'Oswald', sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; font-size:22px; margin:0; line-height:1.1; }
+  .header .tagline{ font-size:12.5px; color:var(--ink-soft); margin-top:3px; }
+  .header::after{
+    content:""; position:absolute; left:0; right:0; bottom:0; height:1px;
+    background-image:linear-gradient(to right, var(--line-strong) 0 6px, transparent 6px 10px);
+    background-size:10px 1px; background-repeat:repeat-x;
+  }
+  .user-bar{ margin-left:auto; display:flex; align-items:center; gap:10px; }
+  .user-bar #currentUserLabel{ font-size:12.5px; color:var(--ink-soft); font-family:'JetBrains Mono', monospace; }
+
+  /* ---------- LOGIN ---------- */
+  .login-screen{ display:flex; justify-content:center; padding:40px 0 60px; }
+  .login-card{ width:100%; max-width:320px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow-md); padding:28px 24px; }
+  .login-error{ margin-top:12px; font-size:12.5px; color:var(--red-dark); background:var(--red-tint); padding:9px 12px; border-radius:6px; }
+
+  /* ---------- CARD ---------- */
+  .card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow-sm); padding:22px; margin-bottom:16px; }
+  .card h2{ font-family:'Oswald', sans-serif; font-size:14.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink); margin:0 0 16px; padding-bottom:12px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
+
+  /* ---------- FORM ---------- */
+  .row{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .field{ flex:1; min-width:160px; display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft); }
+  input, select{ font-family:'Inter', sans-serif; font-size:14px; padding:10px 12px; border:1px solid var(--line-strong); border-radius:6px; background:var(--white); color:var(--ink); width:100%; transition:border-color .15s, box-shadow .15s; }
+  input:focus, select:focus{ outline:none; border-color:var(--red); box-shadow:0 0 0 3px var(--red-tint); }
+  input::placeholder{ color:var(--ink-faint); }
+  input[type=number]{ font-family:'JetBrains Mono', monospace; }
+
+  /* ---------- BUTTONS ---------- */
+  button{ font-family:'Oswald', sans-serif; text-transform:uppercase; letter-spacing:0.03em; font-size:12.5px; font-weight:600; cursor:pointer; border:none; border-radius:6px; padding:11px 18px; transition:background .15s, color .15s, border-color .15s, transform .05s; }
+  button:active{ transform:translateY(1px); }
+  .btn-stamp{ background:var(--red); color:var(--white); }
+  .btn-stamp:hover{ background:var(--red-dark); }
+  .btn-ghost{ background:var(--white); color:var(--ink); border:1px solid var(--line-strong); }
+  .btn-ghost:hover{ background:var(--surface-alt); border-color:var(--ink-faint); }
+  .btn-danger{ background:var(--white); color:var(--red); border:1px solid var(--line-strong); padding:7px 12px; font-size:11px; }
+  .btn-danger:hover{ background:var(--red); color:var(--white); border-color:var(--red); }
+  .btn-small{ padding:7px 12px; font-size:11px; }
+
+  .empty{ color:var(--ink-faint); font-size:13px; font-style:italic; padding:18px 0; text-align:center; }
+
+  /* ---------- KHỔ TRẢI: BỐ CỤC 2 CỘT (chọn kiểu mẫu bên trái, ảnh + nhập kích thước bên phải,
+     luôn hiện cùng lúc không cần cuộn xuống) ---------- */
+  .kt-layout{ display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:start; }
+  .kt-col-left{ position:sticky; top:20px; max-height:calc(100vh - 40px); overflow-y:auto; }
+  .kt-col-right{ display:flex; flex-direction:column; gap:16px; min-width:0; }
+  @media (max-width:860px){
+    .kt-layout{ grid-template-columns:1fr; }
+    .kt-col-left{ position:static; max-height:none; overflow-y:visible; }
+  }
+
+  /* ---------- KHỔ TRẢI ---------- */
+  .kt-cat-tabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+  .kt-cat-tab{ font-family:'Oswald', sans-serif; text-transform:uppercase; letter-spacing:0.03em; font-size:12px; font-weight:600; padding:8px 14px; border-radius:100px; border:1.5px solid var(--line-strong); background:var(--white); color:var(--ink-soft); cursor:pointer; transition:all .15s; }
+  .kt-cat-tab:hover{ border-color:var(--red); color:var(--ink); }
+  .kt-cat-tab.active{ background:var(--ink); border-color:var(--ink); color:var(--white); }
+  .kt-style-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; margin-bottom:8px; border:1.5px solid var(--line); border-radius:var(--radius); background:var(--white); cursor:pointer; transition:border-color .15s, background .15s; }
+  .kt-style-row:hover{ border-color:var(--red); }
+  .kt-style-row.selected{ background:var(--ink); border-color:var(--ink); }
+  .kt-style-row.selected .kt-style-name{ color:var(--white); }
+  .kt-style-row.selected .kt-style-badge{ color:var(--white); border-color:rgba(255,255,255,.4); }
+  .kt-style-name{ font-family:'Oswald', sans-serif; font-weight:500; font-size:14.5px; }
+  .kt-style-badge{ font-size:10.5px; font-family:'JetBrains Mono', monospace; color:var(--ink-faint); border:1px solid var(--line-strong); padding:2px 8px; border-radius:100px; }
+  .kt-style-actions{ display:flex; gap:4px; flex-shrink:0; }
+  .kt-icon-btn{ width:28px; height:28px; border-radius:6px; border:none; background:transparent; color:var(--ink-soft); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:13px; }
+  .kt-icon-btn:hover{ background:var(--surface-alt); color:var(--ink); }
+  .kt-style-row.selected .kt-icon-btn{ color:rgba(255,255,255,.75); }
+  .kt-style-row.selected .kt-icon-btn:hover{ background:rgba(255,255,255,.15); color:var(--white); }
+  .kt-add-btn{ width:100%; padding:11px 12px; border:1.5px dashed var(--line-strong); border-radius:var(--radius); background:var(--surface-alt); color:var(--ink-soft); font-family:'Inter', sans-serif; font-size:13px; font-weight:600; cursor:pointer; transition:border-color .15s, color .15s; }
+  .kt-add-btn:hover{ border-color:var(--red); color:var(--red-dark); }
+  .kt-image-panel{ min-height:220px; display:flex; align-items:center; justify-content:center; padding:14px; }
+  .kt-image-panel img{ max-width:100%; max-height:340px; object-fit:contain; border-radius:8px; }
+  .kt-result{ margin-top:16px; border:1.5px solid var(--ink); border-radius:var(--radius); overflow:hidden; }
+  .kt-result-head{ background:var(--ink); color:var(--white); padding:9px 14px; font-family:'JetBrains Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; }
+  .kt-result-body{ padding:20px 16px; }
+  .kt-result-line{ display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; }
+  .kt-result-num{ font-family:'Oswald', sans-serif; font-weight:700; font-size:30px; color:var(--ink); }
+  .kt-result-x{ font-size:20px; color:var(--ink-faint); }
+  .kt-result-unit{ font-family:'Oswald', sans-serif; font-size:20px; font-weight:700; color:var(--red); margin-left:2px; }
+  .kt-modal-overlay{ position:fixed; inset:0; background:rgba(27,31,34,.5); display:none; align-items:center; justify-content:center; z-index:1000; padding:20px; }
+  .kt-modal-overlay.open{ display:flex; }
+  .kt-modal{ background:var(--white); border-radius:var(--radius); width:100%; max-width:460px; max-height:88vh; overflow-y:auto; box-shadow:var(--shadow-md); }
+  .kt-modal-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .kt-modal-head h3{ margin:0; font-family:'Oswald', sans-serif; text-transform:uppercase; letter-spacing:0.03em; font-size:15px; }
+  .kt-modal-close{ background:none; border:none; font-size:20px; line-height:1; cursor:pointer; color:var(--ink-soft); }
+  .kt-modal-body{ padding:18px 20px; display:flex; flex-direction:column; gap:14px; }
+  .kt-modal-footer{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 20px; border-top:1px solid var(--line); }
+  .kt-hint{ font-size:11px; color:var(--ink-soft); line-height:1.6; margin-top:4px; }
+  .kt-hint code{ background:var(--surface-alt); padding:1px 5px; border-radius:4px; font-family:'JetBrains Mono', monospace; }
+  .kt-save-status{ font-size:11px; color:var(--ink-soft); font-family:'JetBrains Mono', monospace; min-height:14px; }
+
+  .img-dropzone{ display:flex; align-items:center; justify-content:center; gap:10px; min-height:88px; padding:12px; border:1.5px dashed var(--line-strong); border-radius:8px; background:var(--surface-alt); cursor:pointer; transition:border-color .15s, background .15s; text-align:center; }
+  .img-dropzone:hover, .img-dropzone:focus{ border-color:var(--red); background:var(--red-tint); outline:none; }
+  .img-dropzone.dragover{ border-color:var(--red); background:var(--red-tint); }
+  .img-dropzone-hint{ font-size:12.5px; color:var(--ink-soft); line-height:1.6; pointer-events:none; }
+  .img-preview{ width:64px; height:64px; border-radius:6px; border:1px solid var(--line); object-fit:cover; background:var(--white); cursor:zoom-in; }
+
+  .loading{ text-align:center; padding:80px 0; color:var(--ink-soft); font-family:'JetBrains Mono', monospace; font-size:13px; }
+  .loading .spinner{ width:26px; height:26px; margin:0 auto 14px; border:2.5px solid var(--line-strong); border-top-color:var(--red); border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(6px); background:var(--ink); color:var(--white); padding:11px 20px; border-radius:8px; font-size:13px; font-weight:500; box-shadow:var(--shadow-md); opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:100; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  @media (max-width:520px){
+    .app{ padding:20px 14px 60px; }
+    .header h1{ font-size:19px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo-home" id="logoHome" role="button" tabindex="0" title="Về trang chủ">
+      <div class="mark-icon" aria-hidden="true">
+        <svg viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="17" cy="17" r="15.5" stroke="var(--red)" stroke-width="1.4"/>
+          <line x1="17" y1="2" x2="17" y2="10" stroke="var(--red)" stroke-width="1.4"/>
+          <line x1="17" y1="24" x2="17" y2="32" stroke="var(--red)" stroke-width="1.4"/>
+          <line x1="2" y1="17" x2="10" y2="17" stroke="var(--red)" stroke-width="1.4"/>
+          <line x1="24" y1="17" x2="32" y2="17" stroke="var(--red)" stroke-width="1.4"/>
+          <circle cx="17" cy="17" r="3" fill="var(--red)"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Kho Giá</h1>
+        <div class="tagline">Tính khổ trải</div>
+      </div>
+    </div>
+    <div class="user-bar" id="userBar" style="display:none;">
+      <span id="currentUserLabel"></span>
+      <button class="btn-ghost btn-small" id="btnLogout">Đăng xuất</button>
+    </div>
+  </div>
+
+  <div id="loading" class="loading"><div class="spinner"></div>Đang tải dữ liệu...</div>
+
+  <div class="login-screen" id="loginScreen" style="display:none;">
+    <div class="login-card">
+      <div class="field">
+        <label>Tài khoản</label>
+        <input type="text" id="loginUsername" placeholder="vd: hong" autocomplete="username">
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label>Mật khẩu</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="login-error" id="loginError" style="display:none;"></div>
+      <button class="btn-stamp" id="btnLogin" style="width:100%; margin-top:16px;">Đăng nhập</button>
+    </div>
+  </div>
+
+  <div id="mainApp" style="display:none;">
+    <!-- KHỔ TRẢI -->
+    <div id="panel-khotrai">
+      <div class="kt-layout">
+        <div class="card kt-col-left">
+          <h2>Bước 1 — Chọn kiểu mẫu</h2>
+          <div class="kt-cat-tabs" id="ktCatTabs"></div>
+          <div id="ktStyleList"></div>
+          <button class="kt-add-btn" id="ktAddStyleBtn" style="display:none;">+ Thêm kiểu mới</button>
+        </div>
+
+        <div class="kt-col-right">
+          <div class="card">
+            <h2>Ảnh minh họa</h2>
+            <div class="kt-image-panel" id="ktImagePanel">
+              <div class="empty" id="ktImageEmpty">Chọn kiểu mẫu ở Bước 1 để xem ảnh minh họa</div>
+              <img id="ktImageFull" style="display:none;">
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Bước 2 — Nhập kích thước sản phẩm (mm)</h2>
+            <div class="row" id="ktInputsRow"></div>
+            <div class="kt-result">
+              <div class="kt-result-head">Khổ trải</div>
+              <div class="kt-result-body" id="ktResultBody">
+                <div class="empty">Chọn kiểu mẫu và nhập kích thước để tính khổ trải.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: thêm/sửa kiểu mẫu khổ trải -->
+<div class="kt-modal-overlay" id="ktModalOverlay">
+  <div class="kt-modal">
+    <div class="kt-modal-head">
+      <h3 id="ktModalTitle">Thêm kiểu mới</h3>
+      <button class="kt-modal-close" id="ktModalCloseBtn">&times;</button>
+    </div>
+    <div class="kt-modal-body">
+      <div class="field" id="ktMCategoryField">
+        <label>Danh mục</label>
+        <select id="ktMCategory"></select>
+      </div>
+      <div class="field">
+        <label>Tên kiểu</label>
+        <input type="text" id="ktMName" placeholder="VD: Hộp đáy chọt">
+      </div>
+      <div class="field">
+        <label>Ảnh minh họa</label>
+        <div class="img-dropzone" id="ktImgDropzone" tabindex="0">
+          <img id="ktMImgPreview" class="img-preview" style="display:none;">
+          <div class="img-dropzone-hint" id="ktImgDropzoneHint">Kéo thả ảnh vào đây, dán bằng <b>Ctrl+V</b>, hoặc bấm để chọn tệp</div>
+          <input type="file" id="ktMImgFile" accept="image/*" style="display:none;">
+        </div>
+        <button class="btn-ghost btn-small" id="ktMClearImg" type="button" style="display:none; margin-top:8px;">Xóa ảnh</button>
+      </div>
+      <div class="field">
+        <label>Công thức Ngang trải</label>
+        <input type="text" id="ktMNgangFormula" placeholder="VD: (n*2)+(h*2)+15">
+        <div class="kt-hint" id="ktMFormulaHint">Dùng biến <code>n</code> (Ngang), <code>h</code> (Hông), <code>c</code> (Cao). Để trống nếu chưa có công thức.</div>
+      </div>
+      <div class="field">
+        <label>Công thức Cao trải</label>
+        <input type="text" id="ktMCaoFormula" placeholder="VD: c+(h*2)+30">
+      </div>
+    </div>
+    <div class="kt-modal-footer">
+      <button class="btn-danger" id="ktMDeleteBtn" style="display:none;">Xóa kiểu này</button>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
+        <span class="kt-save-status" id="ktSaveStatus"></span>
+        <button class="btn-ghost" id="ktMCancelBtn">Hủy</button>
+        <button class="btn-stamp" id="ktMSaveBtn">Lưu</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://aglvhhscpeebcbicxdge.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_avSOEY21l_MAuzm8OYTp_w_WZURK6Q1';
+const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+let currentRole = null;
+
+/* ---------- KHỔ TRẢI: danh mục cố định + kiểu mẫu lấy từ Supabase ---------- */
+const KT_FIELDS_DEFAULT = [
+  { key:'n', label:'Ngang' },
+  { key:'h', label:'Hông' },
+  { key:'c', label:'Cao' },
+];
+const KT_CATEGORIES = [
+  { id:'hop', name:'Hộp', fields: KT_FIELDS_DEFAULT },
+  { id:'tui-giay', name:'Túi giấy', fields: KT_FIELDS_DEFAULT },
+  { id:'bi-thu', name:'Bì thư', fields: [
+    { key:'n', label:'Ngang' },
+    { key:'c', label:'Cao' },
+    { key:'nap', label:'Nắp' },
+  ] },
+  { id:'folder', name:'Folder', fields: [
+    { key:'n', label:'Ngang' },
+    { key:'c', label:'Cao' },
+    { key:'yem', label:'Yếm' },
+    { key:'gay', label:'Gáy' },
+  ] },
+];
+function ktGetCategory(catId){ return KT_CATEGORIES.find(c=>c.id===catId) || KT_CATEGORIES[0]; }
+function ktGetFields(catId){ return ktGetCategory(catId).fields; }
+let ktStyles = [];
+const ktImageCache = {};
+let ktActiveCategory = KT_CATEGORIES[0].id;
+let ktSelectedId = null;
+let ktModalCtx = null; // { mode:'new'|'edit', id?, categoryId, currentImage, removeImage }
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* ---------- STORAGE (Supabase) ---------- */
+async function loadAll(){
+  try{
+    const {data, error} = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image');
+    if(error) throw error;
+    ktStyles = (data||[]).map(r=>({id:r.id, categoryId:r.category_id, name:r.name, ngangFormula:r.ngang_formula||'', caoFormula:r.cao_formula||'', hasImage: !!r.has_image}));
+  }catch(e){ ktStyles = []; console.error('loadAll khotrai_styles:', e); showToast('Lỗi tải danh mục khổ trải'); }
+}
+async function getKtStyleImage(styleId){
+  if(ktImageCache[styleId] !== undefined) return ktImageCache[styleId];
+  try{
+    const {data, error} = await sbClient.from('khotrai_styles').select('image_base64').eq('id', styleId).single();
+    if(error) throw error;
+    const val = data ? data.image_base64 : null;
+    ktImageCache[styleId] = val;
+    return val;
+  }catch(e){
+    ktImageCache[styleId] = null;
+    return null;
+  }
+}
+
+/* ---------- IMAGE RESIZE (keeps stored images small & fast) ---------- */
+function resizeImage(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        // Nhỏ hơn = nhẹ hơn nhiều. 420px là quá đủ để nhận diện mẫu khi xem ảnh minh họa.
+        const maxW = 420;
+        const scale = Math.min(1, maxW / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        // Thử WebP trước (nhẹ hơn JPEG ~25-30% ở cùng chất lượng), nếu trình duyệt không hỗ trợ thì dùng JPEG.
+        const webp = canvas.toDataURL('image/webp', 0.7);
+        const out = webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/jpeg', 0.72);
+        resolve(out);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ---------- LOGO → VỀ TRANG CHỦ (reset lựa chọn khổ trải) ---------- */
+function goHome(){
+  if(document.getElementById('mainApp').style.display === 'none') return; // chưa đăng nhập thì bỏ qua
+  ktSelectedId = null;
+  ktActiveCategory = KT_CATEGORIES[0].id;
+  renderKtCatTabs();
+  renderKtStyleList();
+  renderKtImagePanel();
+  renderKtInputs();
+  ktCompute();
+}
+const logoHomeEl = document.getElementById('logoHome');
+logoHomeEl.addEventListener('click', goHome);
+logoHomeEl.addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); goHome(); } });
+
+/* ---------- KHỔ TRẢI ---------- */
+function ktGetCategoryStyles(catId){
+  return ktStyles.filter(s=>s.categoryId===catId);
+}
+function ktFindStyleById(id){
+  return ktStyles.find(s=>s.id===id) || null;
+}
+function ktIsReady(style){
+  return !!(style && style.ngangFormula && style.caoFormula);
+}
+function ktEvalFormula(expr, vars){
+  try{
+    const keys = Object.keys(vars);
+    const values = keys.map(k=>vars[k]);
+    const fn = new Function(...keys, 'return (' + expr + ');');
+    const v = fn(...values);
+    return typeof v === 'number' && isFinite(v) ? v : NaN;
+  }catch(e){ return NaN; }
+}
+function ktFmt(v){ return (Math.round(v*100)/100).toLocaleString('vi-VN'); }
+
+/* ---------- KHỔ TRẢI: ô nhập kích thước động theo từng danh mục ---------- */
+function renderKtInputs(){
+  const el = document.getElementById('ktInputsRow');
+  const fields = ktGetFields(ktActiveCategory);
+  el.innerHTML = fields.map(f=>`
+    <div class="field">
+      <label>${f.label}</label>
+      <input type="number" id="kt-input-${f.key}" data-kt-input="${f.key}" placeholder="0">
+    </div>
+  `).join('');
+  el.querySelectorAll('[data-kt-input]').forEach(inp=>{
+    inp.addEventListener('input', ktCompute);
+  });
+}
+function ktReadInputs(){
+  const fields = ktGetFields(ktActiveCategory);
+  const vars = {};
+  fields.forEach(f=>{
+    vars[f.key] = parseFloat(document.getElementById('kt-input-'+f.key).value);
+  });
+  return vars;
+}
+
+function renderKtCatTabs(){
+  const el = document.getElementById('ktCatTabs');
+  el.innerHTML = KT_CATEGORIES.map(cat=>
+    `<div class="kt-cat-tab${cat.id===ktActiveCategory?' active':''}" data-cat="${cat.id}">${cat.name}</div>`
+  ).join('');
+  el.querySelectorAll('.kt-cat-tab').forEach(t=>{
+    t.addEventListener('click', ()=>{ ktActiveCategory = t.dataset.cat; ktSelectedId = null; renderKtCatTabs(); renderKtStyleList(); renderKtImagePanel(); renderKtInputs(); ktCompute(); });
+  });
+  document.getElementById('ktAddStyleBtn').style.display = currentRole==='editor' ? 'block' : 'none';
+}
+function renderKtStyleList(){
+  const el = document.getElementById('ktStyleList');
+  const styles = ktGetCategoryStyles(ktActiveCategory);
+  if(styles.length===0){
+    el.innerHTML = '<div class="empty">Chưa có kiểu mẫu nào trong danh mục này.</div>';
+    return;
+  }
+  const isEditor = currentRole === 'editor';
+  el.innerHTML = styles.map(s=>`
+    <div class="kt-style-row${s.id===ktSelectedId?' selected':''}" data-id="${s.id}">
+      <span class="kt-style-name">${s.name}</span>
+      <div style="display:flex; align-items:center; gap:8px;">
+        ${ktIsReady(s) ? '' : '<span class="kt-style-badge">chưa có công thức</span>'}
+        ${isEditor ? `<div class="kt-style-actions"><button class="kt-icon-btn" data-edit="${s.id}" title="Sửa">✎</button></div>` : ''}
+      </div>
+    </div>
+  `).join('');
+  el.querySelectorAll('.kt-style-row').forEach(row=>{
+    row.addEventListener('click', (e)=>{
+      if(e.target.closest('[data-edit]')) return;
+      ktSelectedId = row.dataset.id;
+      renderKtStyleList();
+      renderKtImagePanel();
+      ktCompute();
+    });
+  });
+  el.querySelectorAll('[data-edit]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      openKtModal({ mode:'edit', id: btn.dataset.edit });
+    });
+  });
+}
+async function renderKtImagePanel(){
+  const sel = ktFindStyleById(ktSelectedId);
+  const imgEl = document.getElementById('ktImageFull');
+  const emptyEl = document.getElementById('ktImageEmpty');
+  if(!sel){
+    imgEl.style.display = 'none';
+    emptyEl.style.display = 'block';
+    emptyEl.textContent = 'Chọn kiểu mẫu ở Bước 1 để xem ảnh minh họa';
+    return;
+  }
+  if(!sel.hasImage){
+    imgEl.style.display = 'none';
+    emptyEl.style.display = 'block';
+    emptyEl.textContent = `Chưa có ảnh minh họa cho "${sel.name}"`;
+    return;
+  }
+  const b64 = await getKtStyleImage(sel.id);
+  if(b64 && sel.id===ktSelectedId){
+    imgEl.src = b64;
+    imgEl.alt = sel.name;
+    imgEl.style.display = 'block';
+    emptyEl.style.display = 'none';
+  }
+}
+function ktCompute(){
+  const body = document.getElementById('ktResultBody');
+  const sel = ktFindStyleById(ktSelectedId);
+  const fields = ktGetFields(ktActiveCategory);
+  const vars = ktReadInputs();
+  if(!sel){ body.innerHTML = '<div class="empty">Chọn kiểu mẫu và nhập kích thước để tính khổ trải.</div>'; return; }
+  if(!ktIsReady(sel)){ body.innerHTML = `<div class="empty">Kiểu "${sel.name}" chưa có công thức tính. ${currentRole==='editor' ? 'Bấm ✎ để nhập công thức.' : ''}</div>`; return; }
+  const missing = fields.some(f=>isNaN(vars[f.key]));
+  if(missing){ body.innerHTML = `<div class="empty">Nhập đủ ${fields.map(f=>f.label).join(' / ')} để tính.</div>`; return; }
+  const ngangTrai = ktEvalFormula(sel.ngangFormula, vars);
+  const caoTrai = ktEvalFormula(sel.caoFormula, vars);
+  if(isNaN(ngangTrai) || isNaN(caoTrai)){ body.innerHTML = '<div class="empty">Công thức của kiểu này chưa hợp lệ.</div>'; return; }
+  body.innerHTML = `
+    <div class="kt-result-line">
+      <span class="kt-result-num">${ktFmt(ngangTrai)}</span><span class="kt-result-x">×</span><span class="kt-result-num">${ktFmt(caoTrai)}</span><span class="kt-result-unit">mm</span>
+    </div>
+  `;
+}
+
+/* ---------- KHỔ TRẢI: modal thêm / sửa kiểu ---------- */
+const ktModalOverlay = document.getElementById('ktModalOverlay');
+const ktMCategoryField = document.getElementById('ktMCategoryField');
+const ktMCategory = document.getElementById('ktMCategory');
+const ktMName = document.getElementById('ktMName');
+const ktMImgPreview = document.getElementById('ktMImgPreview');
+const ktMImgFile = document.getElementById('ktMImgFile');
+const ktImgDropzone = document.getElementById('ktImgDropzone');
+const ktMClearImg = document.getElementById('ktMClearImg');
+const ktMNgangFormula = document.getElementById('ktMNgangFormula');
+const ktMCaoFormula = document.getElementById('ktMCaoFormula');
+const ktMDeleteBtn = document.getElementById('ktMDeleteBtn');
+const ktSaveStatus = document.getElementById('ktSaveStatus');
+
+function updateKtModalHint(){
+  const fields = ktGetFields(ktMCategory.value);
+  const varList = fields.map(f=>`<code>${f.key}</code> (${f.label})`).join(', ');
+  document.getElementById('ktMFormulaHint').innerHTML = `Dùng biến ${varList}. Để trống nếu chưa có công thức.`;
+  ktMNgangFormula.placeholder = 'VD: (' + fields.map(f=>f.key).join('*2)+(') + '*2)';
+  ktMCaoFormula.placeholder = 'VD: ' + fields.map(f=>f.key).join('+');
+}
+function openKtModal(ctx){
+  ktModalCtx = { ...ctx, currentImage:null, removeImage:false };
+  ktSaveStatus.textContent = '';
+  ktMCategory.innerHTML = KT_CATEGORIES.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  if(ctx.mode==='new'){
+    document.getElementById('ktModalTitle').textContent = 'Thêm kiểu mới';
+    ktMCategoryField.style.display = '';
+    ktMCategory.value = ctx.categoryId;
+    ktMCategory.disabled = false;
+    ktMName.value = '';
+    ktMNgangFormula.value = '';
+    ktMCaoFormula.value = '';
+    ktMDeleteBtn.style.display = 'none';
+  } else {
+    const found = ktFindStyleById(ctx.id);
+    document.getElementById('ktModalTitle').textContent = 'Sửa kiểu mẫu';
+    ktMCategoryField.style.display = 'none';
+    ktMCategory.value = found.categoryId;
+    ktMCategory.disabled = true;
+    ktMName.value = found.name;
+    ktMNgangFormula.value = found.ngangFormula || '';
+    ktMCaoFormula.value = found.caoFormula || '';
+    ktModalCtx.hadImage = found.hasImage;
+    ktMDeleteBtn.style.display = '';
+  }
+  updateKtModalHint();
+  renderKtImgPreview();
+  ktModalOverlay.classList.add('open');
+  setTimeout(()=> document.getElementById('ktMImgPreview').closest('.img-dropzone').focus(), 50);
+}
+function closeKtModal(){
+  ktModalOverlay.classList.remove('open');
+  ktModalCtx = null;
+  ktMImgFile.value = '';
+}
+async function renderKtImgPreview(){
+  if(ktModalCtx && ktModalCtx.currentImage){
+    ktMImgPreview.src = ktModalCtx.currentImage;
+    ktMImgPreview.style.display = 'block';
+    ktImgDropzoneHint.style.display = 'none';
+    ktMClearImg.style.display = 'inline-block';
+  } else if(ktModalCtx && ktModalCtx.mode==='edit' && ktModalCtx.hadImage && !ktModalCtx.removeImage){
+    const b64 = await getKtStyleImage(ktModalCtx.id);
+    ktMImgPreview.src = b64;
+    ktMImgPreview.style.display = 'block';
+    ktImgDropzoneHint.style.display = 'none';
+    ktMClearImg.style.display = 'inline-block';
+  } else {
+    ktMImgPreview.style.display = 'none';
+    ktImgDropzoneHint.style.display = 'block';
+    ktMClearImg.style.display = 'none';
+  }
+}
+const ktImgDropzoneHint = document.getElementById('ktImgDropzoneHint');
+async function ktHandleImageFile(file){
+  if(!file || !file.type.startsWith('image/')){ showToast('Vui lòng chọn một tệp ảnh'); return; }
+  try{
+    ktModalCtx.currentImage = await resizeImage(file);
+    ktModalCtx.removeImage = false;
+    renderKtImgPreview();
+  }catch(err){ showToast('Không đọc được ảnh'); }
+}
+document.getElementById('ktModalCloseBtn').addEventListener('click', closeKtModal);
+document.getElementById('ktMCancelBtn').addEventListener('click', closeKtModal);
+ktModalOverlay.addEventListener('click', (e)=>{ if(e.target===ktModalOverlay) closeKtModal(); });
+document.getElementById('ktAddStyleBtn').addEventListener('click', ()=> openKtModal({ mode:'new', categoryId: ktActiveCategory }));
+ktMCategory.addEventListener('change', updateKtModalHint);
+
+ktMImgFile.addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(file) await ktHandleImageFile(file);
+});
+ktImgDropzone.addEventListener('click', ()=> ktMImgFile.click());
+ktImgDropzone.addEventListener('keydown', (e)=>{
+  if(e.key==='Enter' || e.key===' '){ e.preventDefault(); ktMImgFile.click(); }
+});
+['dragenter','dragover'].forEach(evt=>{
+  ktImgDropzone.addEventListener(evt, (e)=>{ e.preventDefault(); e.stopPropagation(); ktImgDropzone.classList.add('dragover'); });
+});
+['dragleave','drop'].forEach(evt=>{
+  ktImgDropzone.addEventListener(evt, (e)=>{ e.preventDefault(); e.stopPropagation(); ktImgDropzone.classList.remove('dragover'); });
+});
+ktImgDropzone.addEventListener('drop', async (e)=>{
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(file) await ktHandleImageFile(file);
+});
+document.addEventListener('paste', async (e)=>{
+  if(!ktModalOverlay.classList.contains('open') || !ktModalCtx) return;
+  const items = e.clipboardData && e.clipboardData.items;
+  if(!items) return;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      const file = item.getAsFile();
+      if(file){ e.preventDefault(); await ktHandleImageFile(file); showToast('Đã dán ảnh'); }
+      break;
+    }
+  }
+});
+ktMClearImg.addEventListener('click', ()=>{
+  ktModalCtx.currentImage = null;
+  ktModalCtx.removeImage = true;
+  renderKtImgPreview();
+});
+
+document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
+  const name = ktMName.value.trim();
+  if(!name){ ktSaveStatus.textContent = 'Nhập tên kiểu trước đã.'; return; }
+  const ngangFormula = ktMNgangFormula.value.trim();
+  const caoFormula = ktMCaoFormula.value.trim();
+  const testFields = ktGetFields(ktMCategory.value);
+  const testVars = {};
+  testFields.forEach((f,i)=>{ testVars[f.key] = 100 + i*50; });
+  if(ngangFormula && isNaN(ktEvalFormula(ngangFormula, testVars))){ ktSaveStatus.textContent = 'Công thức Ngang trải không hợp lệ.'; return; }
+  if(caoFormula && isNaN(ktEvalFormula(caoFormula, testVars))){ ktSaveStatus.textContent = 'Công thức Cao trải không hợp lệ.'; return; }
+
+  ktSaveStatus.textContent = 'Đang lưu…';
+  const hasNewImage = !!ktModalCtx.currentImage;
+  const willHaveImage = hasNewImage || (ktModalCtx.mode==='edit' && ktModalCtx.hadImage && !ktModalCtx.removeImage);
+
+  try{
+    if(ktModalCtx.mode==='new'){
+      const id = 'custom-' + Date.now();
+      const row = {
+        id, category_id: ktMCategory.value, name,
+        ngang_formula: ngangFormula || null, cao_formula: caoFormula || null,
+        has_image: hasNewImage, image_base64: hasNewImage ? ktModalCtx.currentImage : null,
+      };
+      const {error} = await sbClient.from('khotrai_styles').insert(row);
+      if(error) throw error;
+      ktSelectedId = id;
+      ktActiveCategory = row.category_id;
+    } else {
+      const update = {
+        name, ngang_formula: ngangFormula || null, cao_formula: caoFormula || null,
+        has_image: willHaveImage,
+      };
+      if(hasNewImage) update.image_base64 = ktModalCtx.currentImage;
+      else if(ktModalCtx.removeImage) update.image_base64 = null;
+      const {error} = await sbClient.from('khotrai_styles').update(update).eq('id', ktModalCtx.id);
+      if(error) throw error;
+      delete ktImageCache[ktModalCtx.id];
+    }
+    await loadAll();
+    ktSaveStatus.textContent = 'Đã lưu.';
+    renderKtCatTabs();
+    renderKtStyleList();
+    renderKtImagePanel();
+    ktCompute();
+    setTimeout(closeKtModal, 250);
+  }catch(e){
+    console.error('save khotrai style:', e);
+    ktSaveStatus.textContent = 'Lỗi khi lưu.';
+  }
+});
+
+ktMDeleteBtn.addEventListener('click', async ()=>{
+  if(!ktModalCtx || ktModalCtx.mode!=='edit') return;
+  if(!confirm('Xóa kiểu mẫu này?')) return;
+  try{
+    const {error} = await sbClient.from('khotrai_styles').delete().eq('id', ktModalCtx.id);
+    if(error) throw error;
+    if(ktSelectedId===ktModalCtx.id) ktSelectedId = null;
+    await loadAll();
+    closeKtModal();
+    renderKtCatTabs();
+    renderKtStyleList();
+    renderKtImagePanel();
+    ktCompute();
+  }catch(e){
+    console.error('delete khotrai style:', e);
+    ktSaveStatus.textContent = 'Lỗi khi xóa.';
+  }
+});
+
+/* ---------- AUTH ---------- */
+async function afterLogin(user){
+  currentUser = user;
+  const {data, error} = await sbClient.from('app_users').select('username, role').eq('id', user.id).single();
+  if(error || !data){
+    console.error('load profile:', error);
+    showToast('Tài khoản chưa được cấp quyền, liên hệ quản trị');
+    await sbClient.auth.signOut();
+    return;
+  }
+  currentRole = data.role;
+  document.getElementById('currentUserLabel').textContent = data.username + (currentRole==='editor' ? ' · Toàn quyền' : ' · Chỉ xem');
+  document.getElementById('userBar').style.display = 'flex';
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('loading').style.display = 'block';
+  await loadAll();
+  renderKtCatTabs();
+  renderKtStyleList();
+  renderKtImagePanel();
+  renderKtInputs();
+  ktCompute();
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+}
+async function doLogin(){
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  if(!username || !password){ errEl.textContent = 'Nhập đầy đủ tài khoản và mật khẩu'; errEl.style.display = 'block'; return; }
+  const btn = document.getElementById('btnLogin');
+  btn.disabled = true; btn.textContent = 'Đang đăng nhập...';
+  const email = username.toLowerCase() + '@kho-gia.local';
+  const {data, error} = await sbClient.auth.signInWithPassword({email, password});
+  btn.disabled = false; btn.textContent = 'Đăng nhập';
+  if(error){
+    console.error('login error:', error);
+    errEl.textContent = 'Sai tài khoản hoặc mật khẩu';
+    errEl.style.display = 'block';
+    return;
+  }
+  document.getElementById('loginPassword').value = '';
+  await afterLogin(data.user);
+}
+document.getElementById('btnLogin').addEventListener('click', doLogin);
+document.getElementById('loginPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+document.getElementById('loginUsername').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('loginPassword').focus(); });
+document.getElementById('btnLogout').addEventListener('click', async ()=>{
+  await sbClient.auth.signOut();
+  currentUser = null; currentRole = null;
+  ktStyles = []; ktSelectedId = null;
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('userBar').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginUsername').value = '';
+});
+
+/* ---------- INIT ---------- */
+async function init(){
+  document.getElementById('loading').style.display = 'block';
+  const {data:{session}} = await sbClient.auth.getSession();
+  document.getElementById('loading').style.display = 'none';
+  if(session && session.user){
+    document.getElementById('loading').style.display = 'block';
+    await afterLogin(session.user);
+  }else{
+    document.getElementById('loginScreen').style.display = 'flex';
+  }
+}
+init();
+</script>
+</body>
+</html>
