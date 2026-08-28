@@ -47,8 +47,6 @@
   .user-bar #currentUserLabel{ font-size:12.5px; color:var(--ink-soft); font-family:'JetBrains Mono', monospace; }
 
   /* ---------- LOGIN ---------- */
-  .login-screen{ display:flex; justify-content:center; padding:40px 0 60px; }
-  .login-card{ width:100%; max-width:320px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow-md); padding:28px 24px; }
   .login-error{ margin-top:12px; font-size:12.5px; color:var(--red-dark); background:var(--red-tint); padding:9px 12px; border-radius:6px; }
 
   /* ---------- CARD ---------- */
@@ -185,28 +183,14 @@
         <div class="tagline">Tính khổ trải</div>
       </div>
     </div>
-    <div class="user-bar" id="userBar" style="display:none;">
-      <span id="currentUserLabel"></span>
-      <button class="btn-ghost btn-small" id="btnLogout">Đăng xuất</button>
+    <div class="user-bar" id="userBar">
+      <button class="btn-ghost btn-small" id="btnShowLogin">Đăng nhập</button>
+      <span id="currentUserLabel" style="display:none;"></span>
+      <button class="btn-ghost btn-small" id="btnLogout" style="display:none;">Đăng xuất</button>
     </div>
   </div>
 
   <div id="loading" class="loading"><div class="spinner"></div>Đang tải dữ liệu...</div>
-
-  <div class="login-screen" id="loginScreen" style="display:none;">
-    <div class="login-card">
-      <div class="field">
-        <label>Tài khoản</label>
-        <input type="text" id="loginUsername" placeholder="vd: hong" autocomplete="username">
-      </div>
-      <div class="field" style="margin-top:12px;">
-        <label>Mật khẩu</label>
-        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <div class="login-error" id="loginError" style="display:none;"></div>
-      <button class="btn-stamp" id="btnLogin" style="width:100%; margin-top:16px;">Đăng nhập</button>
-    </div>
-  </div>
 
   <div id="mainApp" style="display:none;">
     <!-- KHỔ TRẢI -->
@@ -242,6 +226,33 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: đăng nhập quản trị -->
+<div class="kt-modal-overlay" id="loginModalOverlay">
+  <div class="kt-modal" style="max-width:340px;">
+    <div class="kt-modal-head">
+      <h3>Đăng nhập quản trị</h3>
+      <button class="kt-modal-close" id="loginModalCloseBtn">&times;</button>
+    </div>
+    <div class="kt-modal-body">
+      <div class="field">
+        <label>Tài khoản</label>
+        <input type="text" id="loginUsername" placeholder="vd: hong" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>Mật khẩu</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="login-error" id="loginError" style="display:none;"></div>
+    </div>
+    <div class="kt-modal-footer">
+      <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
+        <button class="btn-ghost" id="loginModalCancelBtn">Hủy</button>
+        <button class="btn-stamp" id="btnLogin">Đăng nhập</button>
       </div>
     </div>
   </div>
@@ -444,7 +455,7 @@ function resizeImage(file){
 
 /* ---------- LOGO → VỀ TRANG CHỦ (reset lựa chọn khổ trải) ---------- */
 function goHome(){
-  if(document.getElementById('mainApp').style.display === 'none') return; // chưa đăng nhập thì bỏ qua
+  if(document.getElementById('mainApp').style.display === 'none') return; // đang tải dữ liệu thì bỏ qua
   ktSelectedId = null;
   ktActiveCategory = KT_CATEGORIES[0].id;
   renderKtCatTabs();
@@ -966,28 +977,43 @@ ktCatMDeleteBtn.addEventListener('click', async ()=>{
 });
 
 /* ---------- AUTH ---------- */
+function openLoginModal(){
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('loginUsername').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginModalOverlay').classList.add('open');
+  setTimeout(()=> document.getElementById('loginUsername').focus(), 50);
+}
+function closeLoginModal(){
+  document.getElementById('loginModalOverlay').classList.remove('open');
+}
+function updateAuthHeader(){
+  const isLoggedIn = !!currentUser;
+  document.getElementById('btnShowLogin').style.display = isLoggedIn ? 'none' : 'inline-block';
+  document.getElementById('currentUserLabel').style.display = isLoggedIn ? 'inline' : 'none';
+  document.getElementById('btnLogout').style.display = isLoggedIn ? 'inline-block' : 'none';
+}
+function refreshAfterRoleChange(){
+  renderKtCatTabs();
+  renderKtStyleList();
+  renderKtImagePanel();
+  ktCompute();
+}
 async function afterLogin(user){
   currentUser = user;
   const {data, error} = await sbClient.from('app_users').select('username, role').eq('id', user.id).single();
   if(error || !data){
     console.error('load profile:', error);
     showToast('Tài khoản chưa được cấp quyền, liên hệ quản trị');
+    currentUser = null;
     await sbClient.auth.signOut();
+    updateAuthHeader();
     return;
   }
   currentRole = data.role;
   document.getElementById('currentUserLabel').textContent = data.username + (currentRole==='editor' ? ' · Toàn quyền' : ' · Chỉ xem');
-  document.getElementById('userBar').style.display = 'flex';
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('loading').style.display = 'block';
-  await loadAll();
-  renderKtCatTabs();
-  renderKtStyleList();
-  renderKtImagePanel();
-  renderKtInputs();
-  ktCompute();
-  document.getElementById('loading').style.display = 'none';
-  document.getElementById('mainApp').style.display = 'block';
+  updateAuthHeader();
+  refreshAfterRoleChange();
 }
 async function doLogin(){
   const username = document.getElementById('loginUsername').value.trim();
@@ -1008,30 +1034,41 @@ async function doLogin(){
   }
   document.getElementById('loginPassword').value = '';
   await afterLogin(data.user);
+  closeLoginModal();
 }
+document.getElementById('btnShowLogin').addEventListener('click', openLoginModal);
+document.getElementById('loginModalCloseBtn').addEventListener('click', closeLoginModal);
+document.getElementById('loginModalCancelBtn').addEventListener('click', closeLoginModal);
 document.getElementById('btnLogin').addEventListener('click', doLogin);
 document.getElementById('loginPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
 document.getElementById('loginUsername').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('loginPassword').focus(); });
 document.getElementById('btnLogout').addEventListener('click', async ()=>{
   await sbClient.auth.signOut();
   currentUser = null; currentRole = null;
-  ktStyles = []; ktSelectedId = null;
-  document.getElementById('mainApp').style.display = 'none';
-  document.getElementById('userBar').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
-  document.getElementById('loginUsername').value = '';
+  ktSelectedId = null;
+  updateAuthHeader();
+  refreshAfterRoleChange();
+  showToast('Đã đăng xuất, chuyển sang chế độ chỉ xem');
 });
 
 /* ---------- INIT ---------- */
 async function init(){
   document.getElementById('loading').style.display = 'block';
-  const {data:{session}} = await sbClient.auth.getSession();
+  currentRole = null;
+  await loadAll();
+  renderKtCatTabs();
+  renderKtStyleList();
+  renderKtImagePanel();
+  renderKtInputs();
+  ktCompute();
   document.getElementById('loading').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+
+  const {data:{session}} = await sbClient.auth.getSession();
   if(session && session.user){
-    document.getElementById('loading').style.display = 'block';
     await afterLogin(session.user);
-  }else{
-    document.getElementById('loginScreen').style.display = 'flex';
+  } else {
+    updateAuthHeader();
   }
 }
 init();
