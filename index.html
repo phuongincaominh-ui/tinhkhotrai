@@ -21,6 +21,9 @@
     --line:#E7E5E1;
     --line-strong:#D9D6D0;
     --white:#FFFFFF;
+    --amber:#B7791F;
+    --amber-dark:#7A5210;
+    --amber-tint:#FCF3DF;
     --shadow-sm:0 1px 2px rgba(20,18,16,.05);
     --shadow-md:0 2px 6px rgba(20,18,16,.06), 0 8px 24px rgba(20,18,16,.06);
     --radius:8px;
@@ -130,10 +133,20 @@
   .kt-part-label-input{ font-family:'Oswald', sans-serif !important; font-weight:600 !important; }
   .kt-result-line{ display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; }
   .kt-result-line + .kt-result-line{ margin-top:14px; padding-top:14px; border-top:1px dashed var(--line); }
+  .kt-result-line-wrap{ display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
   .kt-result-label{ font-family:'Oswald', sans-serif; font-weight:600; font-size:12.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); min-width:52px; }
   .kt-result-num{ font-family:'Oswald', sans-serif; font-weight:700; font-size:30px; color:var(--ink); }
   .kt-result-x{ font-size:20px; color:var(--ink-faint); }
   .kt-result-unit{ font-family:'Oswald', sans-serif; font-size:20px; font-weight:700; color:var(--red); margin-left:2px; }
+  /* ---------- KHỔ TRẢI: ghi chú / cảnh báo hiển thị kèm kết quả ---------- */
+  .kt-note-box{ display:flex; align-items:flex-start; gap:8px; background:var(--amber-tint); border:1px solid var(--amber); border-radius:6px; padding:8px 12px; font-size:13px; color:var(--amber-dark); line-height:1.4; }
+  .kt-note-box + .kt-note-box{ margin-top:8px; }
+  .kt-result-line + .kt-note-box{ margin-top:14px; }
+  .kt-note-box .kt-note-icon{ flex-shrink:0; font-size:14px; line-height:1.4; }
+  .kt-note-rule-row{ position:relative; border:1.5px solid var(--line); border-radius:8px; padding:12px 36px 12px 12px; background:var(--surface-alt); display:flex; flex-direction:column; gap:8px; }
+  .kt-note-rule-row .row{ margin-bottom:0; }
+  .kt-note-rule-row .field{ min-width:110px; }
+  .kt-note-rule-row .field.kt-noterule-text{ min-width:180px; flex:2; }
   .kt-modal-overlay{ position:fixed; inset:0; background:rgba(27,31,34,.5); display:none; align-items:center; justify-content:center; z-index:1000; padding:20px; }
   .kt-modal-overlay.open{ display:flex; }
   .kt-modal{ background:var(--white); border-radius:var(--radius); width:100%; max-width:460px; max-height:88vh; overflow-y:auto; box-shadow:var(--shadow-md); }
@@ -289,6 +302,17 @@
         <div class="kt-parts-list" id="ktMPartsList"></div>
         <button class="btn-ghost btn-small" id="ktMAddPartBtn" type="button" style="align-self:flex-start; margin-top:4px;">+ Thêm thành phần (VD: Đáy, Nắp)</button>
       </div>
+      <div class="field">
+        <label>Ghi chú theo điều kiện (tùy chọn)</label>
+        <div class="kt-hint">Khi một kích thước nhập vào nằm trong khoảng chỉ định, ghi chú sẽ tự hiện bên cạnh kết quả khổ trải. VD: Ngang túi 16–20cm → "Sử dụng dây 28cm".</div>
+        <div class="kt-parts-list" id="ktMNoteRulesList"></div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:4px;">
+          <button class="btn-ghost btn-small" id="ktMAddNoteRuleBtn" type="button">+ Thêm ghi chú</button>
+          <span style="color:var(--muted); font-size:13px;">hoặc</span>
+          <select id="ktMCopyNoteSource" style="max-width:220px;"></select>
+          <button class="btn-ghost btn-small" id="ktMCopyNoteBtn" type="button">Sao chép ghi chú từ kiểu này</button>
+        </div>
+      </div>
     </div>
     <div class="kt-modal-footer">
       <button class="btn-danger" id="ktMDeleteBtn" style="display:none;">Xóa kiểu này</button>
@@ -352,11 +376,13 @@ const KT_CATEGORIES = [
   { id:'tui-giay', name:'Túi giấy', fields: KT_FIELDS_DEFAULT },
   { id:'bi-thu', name:'Bì thư', fields: [
     { key:'n', label:'Ngang' },
+    { key:'h', label:'Hông' },
     { key:'c', label:'Cao' },
     { key:'nap', label:'Nắp' },
   ] },
   { id:'folder', name:'Folder', fields: [
     { key:'n', label:'Ngang' },
+    { key:'h', label:'Hông' },
     { key:'c', label:'Cao' },
     { key:'yem', label:'Yếm' },
     { key:'gay', label:'Gáy' },
@@ -396,13 +422,27 @@ function showToast(msg){
 /* ---------- STORAGE (Supabase) ---------- */
 async function loadAll(){
   try{
-    const {data, error} = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts');
+    let res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules');
+    if(res.error && /note_rules/i.test(res.error.message||'')){
+      // Cột note_rules chưa được tạo trên Supabase -> tải lại không kèm cột này để không mất dữ liệu hiện có.
+      console.warn('Cột note_rules chưa tồn tại trên Supabase, tạm bỏ qua ghi chú theo điều kiện.');
+      res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts');
+    }
+    const {data, error} = res;
     if(error) throw error;
     ktStyles = (data||[]).map(r=>{
       let parts = Array.isArray(r.parts) && r.parts.length ? r.parts.map(p=>({
-        label: p.label || '', ngangFormula: p.ngangFormula || p.ngang_formula || '', caoFormula: p.caoFormula || p.cao_formula || ''
+        label: p.label || '',
+        ngangFormula: p.ngangFormula || p.ngang_formula || (Array.isArray(p.ngangRules) && p.ngangRules[0] && p.ngangRules[0].formula) || '',
+        caoFormula: p.caoFormula || p.cao_formula || (Array.isArray(p.caoRules) && p.caoRules[0] && p.caoRules[0].formula) || '',
       })) : [{ label:'', ngangFormula: r.ngang_formula || '', caoFormula: r.cao_formula || '' }];
-      return { id:r.id, categoryId:r.category_id, name:r.name, hasImage: !!r.has_image, parts };
+      const noteRules = Array.isArray(r.note_rules) ? r.note_rules.map(n=>({
+        field: n.field || '',
+        min: (n.min===null || n.min===undefined || n.min==='') ? null : Number(n.min),
+        max: (n.max===null || n.max===undefined || n.max==='') ? null : Number(n.max),
+        text: n.text || '',
+      })) : [];
+      return { id:r.id, categoryId:r.category_id, name:r.name, hasImage: !!r.has_image, parts, noteRules };
     });
   }catch(e){ ktStyles = []; console.error('loadAll khotrai_styles:', e); showToast('Lỗi tải danh mục khổ trải'); }
   try{
@@ -488,14 +528,25 @@ function ktEvalFormula(expr, vars){
   }catch(e){ return NaN; }
 }
 function ktFmt(v){ return (Math.round(v*100)/100).toLocaleString('vi-VN'); }
+function ktMatchedNotes(style, vars){
+  const rules = Array.isArray(style.noteRules) ? style.noteRules : [];
+  return rules.filter(r=>{
+    if(!r.field || !r.text) return false;
+    const v = vars[r.field];
+    if(isNaN(v)) return false;
+    if(r.min!==null && v < r.min) return false;
+    if(r.max!==null && v > r.max) return false;
+    return true;
+  });
+}
 
 /* ---------- KHỔ TRẢI: ô nhập kích thước động theo từng danh mục ---------- */
 function renderKtInputs(){
   const el = document.getElementById('ktInputsRow');
   const fields = ktGetFields(ktActiveCategory);
-  el.innerHTML = fields.map(f=>`
+  el.innerHTML = fields.map((f,i)=>`
     <div class="field">
-      <label>${f.label}</label>
+      <label>${i+1}. ${f.label}</label>
       <input type="number" id="kt-input-${f.key}" data-kt-input="${f.key}" placeholder="0">
     </div>
   `).join('');
@@ -605,10 +656,18 @@ function ktCompute(){
     if(isNaN(ngangTrai) || isNaN(caoTrai)){ body.innerHTML = '<div class="empty">Công thức của kiểu này chưa hợp lệ.</div>'; return; }
     lines.push(`
       <div class="kt-result-line">
-        ${part.label ? `<span class="kt-result-label">${part.label}</span>` : ''}
-        <span class="kt-result-num">${ktFmt(ngangTrai)}</span><span class="kt-result-x">×</span><span class="kt-result-num">${ktFmt(caoTrai)}</span><span class="kt-result-unit">mm</span>
+        <div class="kt-result-line-wrap">
+          ${part.label ? `<span class="kt-result-label">${part.label}</span>` : ''}
+          <span class="kt-result-num">${ktFmt(ngangTrai)}</span><span class="kt-result-x">×</span><span class="kt-result-num">${ktFmt(caoTrai)}</span><span class="kt-result-unit">mm</span>
+        </div>
       </div>
     `);
+  }
+  const notes = ktMatchedNotes(sel, vars);
+  if(notes.length){
+    lines.push(notes.map(n=>`
+      <div class="kt-note-box"><span class="kt-note-icon">⚠</span><span>${n.text.replace(/</g,'&lt;')}</span></div>
+    `).join(''));
   }
   body.innerHTML = lines.join('');
 }
@@ -678,6 +737,95 @@ document.getElementById('ktMAddPartBtn').addEventListener('click', ()=>{
   ktMPartRows.push({ label:'', ngangFormula:'', caoFormula:'' });
   ktRenderPartRows();
 });
+
+/* ---------- KHỔ TRẢI: ghi chú theo điều kiện (VD: Ngang 16-20cm -> "Sử dụng dây 28cm") ---------- */
+const ktMNoteRulesList = document.getElementById('ktMNoteRulesList');
+let ktMNoteRuleRows = []; // [{field, min, max, text}] đang chỉnh trong modal
+function ktRenderNoteRuleRows(){
+  const fields = ktGetFields(ktMCategory.value);
+  const fieldOptions = fields.map(f=>`<option value="${f.key}">${f.label}</option>`).join('');
+  if(!ktMNoteRuleRows.length){
+    ktMNoteRulesList.innerHTML = '';
+    return;
+  }
+  ktMNoteRulesList.innerHTML = ktMNoteRuleRows.map((r, i)=>`
+    <div class="kt-note-rule-row" data-idx="${i}">
+      <button type="button" class="kt-part-remove" data-noterule-remove="${i}" title="Xóa ghi chú này">&times;</button>
+      <div class="row">
+        <div class="field">
+          <label>Kích thước</label>
+          <select data-noterule-field="${i}">${fieldOptions}</select>
+        </div>
+        <div class="field">
+          <label>Từ</label>
+          <input type="number" data-noterule-min="${i}" value="${r.min ?? ''}" placeholder="16">
+        </div>
+        <div class="field">
+          <label>Đến</label>
+          <input type="number" data-noterule-max="${i}" value="${r.max ?? ''}" placeholder="20">
+        </div>
+        <div class="field kt-noterule-text">
+          <label>Nội dung ghi chú</label>
+          <input type="text" data-noterule-text="${i}" value="${(r.text||'').replace(/"/g,'&quot;')}" placeholder="VD: Sử dụng dây 28cm">
+        </div>
+      </div>
+    </div>
+  `).join('');
+  ktMNoteRulesList.querySelectorAll('[data-noterule-field]').forEach(sel=>{
+    const i = +sel.dataset.noteruleField;
+    sel.value = fields.some(f=>f.key===ktMNoteRuleRows[i].field) ? ktMNoteRuleRows[i].field : (fields[0] ? fields[0].key : '');
+    ktMNoteRuleRows[i].field = sel.value;
+    sel.addEventListener('change', ()=>{ ktMNoteRuleRows[i].field = sel.value; });
+  });
+  ktMNoteRulesList.querySelectorAll('[data-noterule-min]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{ ktMNoteRuleRows[+inp.dataset.noteruleMin].min = inp.value; });
+  });
+  ktMNoteRulesList.querySelectorAll('[data-noterule-max]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{ ktMNoteRuleRows[+inp.dataset.noteruleMax].max = inp.value; });
+  });
+  ktMNoteRulesList.querySelectorAll('[data-noterule-text]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{ ktMNoteRuleRows[+inp.dataset.noteruleText].text = inp.value; });
+  });
+  ktMNoteRulesList.querySelectorAll('[data-noterule-remove]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      ktMNoteRuleRows.splice(+btn.dataset.noteruleRemove, 1);
+      ktRenderNoteRuleRows();
+    });
+  });
+}
+document.getElementById('ktMAddNoteRuleBtn').addEventListener('click', ()=>{
+  const fields = ktGetFields(ktMCategory.value);
+  ktMNoteRuleRows.push({ field: fields[0] ? fields[0].key : '', min:'', max:'', text:'' });
+  ktRenderNoteRuleRows();
+});
+
+/* Sao chép ghi chú từ 1 kiểu mẫu có sẵn (bất kỳ danh mục nào) sang kiểu đang sửa/tạo — nối vào cuối danh sách hiện tại */
+const ktMCopyNoteSource = document.getElementById('ktMCopyNoteSource');
+function ktRenderCopyNoteSourceOptions(){
+  const currentId = ktModalCtx && ktModalCtx.mode === 'edit' ? ktModalCtx.id : null;
+  const opts = ktStyles.filter(s => s.id !== currentId);
+  ktMCopyNoteSource.innerHTML = opts.length
+    ? opts.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')
+    : `<option value="">(chưa có kiểu nào khác)</option>`;
+}
+document.getElementById('ktMCopyNoteBtn').addEventListener('click', ()=>{
+  const srcId = ktMCopyNoteSource.value;
+  const src = ktFindStyleById(srcId);
+  if(!src){ showToast('Chưa chọn kiểu để sao chép'); return; }
+  const srcRules = Array.isArray(src.noteRules) ? src.noteRules : [];
+  if(!srcRules.length){ showToast(`Kiểu "${src.name}" chưa có ghi chú nào`); return; }
+  const fields = ktGetFields(ktMCategory.value);
+  srcRules.forEach(r=>{
+    ktMNoteRuleRows.push({
+      field: fields.some(f=>f.key===r.field) ? r.field : (fields[0] ? fields[0].key : ''),
+      min: r.min===null||r.min===undefined ? '' : r.min,
+      max: r.max===null||r.max===undefined ? '' : r.max,
+      text: r.text||''
+    });
+  });
+  ktRenderNoteRuleRows();
+  showToast(`Đã nối thêm ${srcRules.length} ghi chú từ "${src.name}"`);
+});
 function openKtModal(ctx){
   ktModalCtx = { ...ctx, currentImage:null, removeImage:false };
   ktSaveStatus.textContent = '';
@@ -689,6 +837,7 @@ function openKtModal(ctx){
     ktMCategory.disabled = false;
     ktMName.value = '';
     ktMPartRows = [{ label:'', ngangFormula:'', caoFormula:'' }];
+    ktMNoteRuleRows = [];
     ktMDeleteBtn.style.display = 'none';
   } else {
     const found = ktFindStyleById(ctx.id);
@@ -698,11 +847,14 @@ function openKtModal(ctx){
     ktMCategory.disabled = true;
     ktMName.value = found.name;
     ktMPartRows = found.parts.map(p=>({ label:p.label||'', ngangFormula:p.ngangFormula||'', caoFormula:p.caoFormula||'' }));
+    ktMNoteRuleRows = (found.noteRules||[]).map(r=>({ field:r.field||'', min: r.min===null||r.min===undefined ? '' : r.min, max: r.max===null||r.max===undefined ? '' : r.max, text:r.text||'' }));
     ktModalCtx.hadImage = found.hasImage;
     ktMDeleteBtn.style.display = '';
   }
   updateKtModalHint();
   ktRenderPartRows();
+  ktRenderNoteRuleRows();
+  ktRenderCopyNoteSourceOptions();
   renderKtImgPreview();
   ktModalOverlay.classList.add('open');
   setTimeout(()=> document.getElementById('ktMImgPreview').closest('.img-dropzone').focus(), 50);
@@ -742,7 +894,7 @@ async function ktHandleImageFile(file){
 document.getElementById('ktModalCloseBtn').addEventListener('click', closeKtModal);
 document.getElementById('ktMCancelBtn').addEventListener('click', closeKtModal);
 document.getElementById('ktAddStyleBtn').addEventListener('click', ()=> openKtModal({ mode:'new', categoryId: ktActiveCategory }));
-ktMCategory.addEventListener('change', ()=>{ updateKtModalHint(); ktRenderPartRows(); });
+ktMCategory.addEventListener('change', ()=>{ updateKtModalHint(); ktRenderPartRows(); ktRenderNoteRuleRows(); });
 
 ktMImgFile.addEventListener('change', async (e)=>{
   const file = e.target.files[0];
@@ -792,43 +944,65 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
     if(p.ngangFormula && isNaN(ktEvalFormula(p.ngangFormula, testVars))){ ktSaveStatus.textContent = `Công thức Ngang trải${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ.`; return; }
     if(p.caoFormula && isNaN(ktEvalFormula(p.caoFormula, testVars))){ ktSaveStatus.textContent = `Công thức Cao trải${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ.`; return; }
   }
+  const cleanNoteRules = ktMNoteRuleRows
+    .map(r=>({
+      field: r.field || '',
+      min: (r.min===''||r.min===null||r.min===undefined) ? null : Number(r.min),
+      max: (r.max===''||r.max===null||r.max===undefined) ? null : Number(r.max),
+      text: (r.text||'').trim(),
+    }))
+    .filter(r=>r.field && r.text);
+  if(cleanNoteRules.some(r=>r.min!==null && r.max!==null && r.min > r.max)){ ktSaveStatus.textContent = 'Khoảng "Từ - Đến" của một ghi chú đang bị ngược, hãy kiểm tra lại.'; return; }
 
   ktSaveStatus.textContent = 'Đang lưu…';
   const hasNewImage = !!ktModalCtx.currentImage;
   const willHaveImage = hasNewImage || (ktModalCtx.mode==='edit' && ktModalCtx.hadImage && !ktModalCtx.removeImage);
 
   try{
+    let noteRulesUnsupported = false;
     if(ktModalCtx.mode==='new'){
       const id = 'custom-' + Date.now();
       const row = {
-        id, category_id: ktMCategory.value, name, parts: cleanParts,
+        id, category_id: ktMCategory.value, name, parts: cleanParts, note_rules: cleanNoteRules,
         has_image: hasNewImage, image_base64: hasNewImage ? ktModalCtx.currentImage : null,
       };
-      const {error} = await sbClient.from('khotrai_styles').insert(row);
+      let {error} = await sbClient.from('khotrai_styles').insert(row);
+      if(error && /note_rules/i.test(error.message||'')){
+        noteRulesUnsupported = true;
+        delete row.note_rules;
+        ({error} = await sbClient.from('khotrai_styles').insert(row));
+      }
       if(error) throw error;
       ktSelectedId = id;
       ktActiveCategory = row.category_id;
     } else {
       const update = {
-        name, parts: cleanParts,
+        name, parts: cleanParts, note_rules: cleanNoteRules,
         has_image: willHaveImage,
       };
       if(hasNewImage) update.image_base64 = ktModalCtx.currentImage;
       else if(ktModalCtx.removeImage) update.image_base64 = null;
-      const {error} = await sbClient.from('khotrai_styles').update(update).eq('id', ktModalCtx.id);
+      let {error} = await sbClient.from('khotrai_styles').update(update).eq('id', ktModalCtx.id);
+      if(error && /note_rules/i.test(error.message||'')){
+        noteRulesUnsupported = true;
+        delete update.note_rules;
+        ({error} = await sbClient.from('khotrai_styles').update(update).eq('id', ktModalCtx.id));
+      }
       if(error) throw error;
       delete ktImageCache[ktModalCtx.id];
     }
     await loadAll();
-    ktSaveStatus.textContent = 'Đã lưu.';
+    ktSaveStatus.textContent = noteRulesUnsupported
+      ? 'Đã lưu (chưa lưu được ghi chú — cần tạo cột note_rules trên Supabase).'
+      : 'Đã lưu.';
     renderKtCatTabs();
     renderKtStyleList();
     renderKtImagePanel();
     ktCompute();
-    setTimeout(closeKtModal, 250);
+    setTimeout(closeKtModal, noteRulesUnsupported ? 1800 : 250);
   }catch(e){
     console.error('save khotrai style:', e);
-    ktSaveStatus.textContent = 'Lỗi khi lưu.';
+    ktSaveStatus.textContent = 'Lỗi khi lưu. (Cột note_rules đã được tạo trên bảng khotrai_styles chưa?)';
   }
 });
 
@@ -897,7 +1071,7 @@ function openKtCatModal(ctx){
   if(ctx.mode==='new'){
     document.getElementById('ktCatModalTitle').textContent = 'Thêm danh mục mới';
     ktCatMName.value = '';
-    ktCatFieldRows = [{ label:'Ngang', key:'n' }, { label:'Cao', key:'c' }];
+    ktCatFieldRows = [{ label:'Ngang', key:'n' }, { label:'Hông', key:'h' }, { label:'Cao', key:'c' }];
     ktCatMDeleteBtn.style.display = 'none';
   } else {
     const found = ktGetCategory(ctx.id);
