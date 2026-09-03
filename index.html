@@ -30,7 +30,7 @@
   }
   *{box-sizing:border-box;}
   body{ margin:0; background:var(--bg); color:var(--ink); font-family:'Inter', sans-serif; -webkit-font-smoothing:antialiased; }
-  .app{ max-width:960px; margin:0 auto; padding:28px 20px 70px; }
+  .app{ max-width:1320px; margin:0 auto; padding:28px 20px 70px; }
 
   /* ---------- HEADER ---------- */
   .header{ display:flex; align-items:center; gap:12px; padding-bottom:18px; margin-bottom:22px; position:relative; }
@@ -78,14 +78,20 @@
 
   .empty{ color:var(--ink-faint); font-size:13px; font-style:italic; padding:18px 0; text-align:center; }
 
-  /* ---------- KHỔ TRẢI: BỐ CỤC 2 CỘT (chọn kiểu mẫu bên trái, ảnh + nhập kích thước bên phải,
+  /* ---------- KHỔ TRẢI: BỐ CỤC 3 CỘT (danh sách kiểu mẫu | ảnh minh họa | nhập liệu & kết quả,
      luôn hiện cùng lúc không cần cuộn xuống) ---------- */
-  .kt-layout{ display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:start; }
+  .kt-layout{ display:grid; grid-template-columns:280px minmax(240px,1fr) 380px; gap:16px; align-items:start; }
   .kt-col-left{ position:sticky; top:20px; max-height:calc(100vh - 40px); overflow-y:auto; }
-  .kt-col-right{ display:flex; flex-direction:column; gap:16px; min-width:0; }
+  .kt-col-mid{ position:sticky; top:20px; }
+  .kt-col-right{ display:flex; flex-direction:column; gap:16px; min-width:0; position:sticky; top:20px; max-height:calc(100vh - 40px); overflow-y:auto; }
+  @media (max-width:1180px){
+    .kt-layout{ grid-template-columns:260px 1fr; }
+    .kt-col-right{ grid-column:1 / -1; position:static; max-height:none; overflow-y:visible; }
+  }
   @media (max-width:860px){
     .kt-layout{ grid-template-columns:1fr; }
     .kt-col-left{ position:static; max-height:none; overflow-y:visible; }
+    .kt-col-mid{ position:static; }
   }
 
   /* ---------- KHỔ TRẢI ---------- */
@@ -120,11 +126,29 @@
   .kt-style-row.selected .kt-icon-btn:hover{ background:rgba(255,255,255,.15); color:var(--white); }
   .kt-add-btn{ width:100%; padding:11px 12px; border:1.5px dashed var(--line-strong); border-radius:var(--radius); background:var(--surface-alt); color:var(--ink-soft); font-family:'Inter', sans-serif; font-size:13px; font-weight:600; cursor:pointer; transition:border-color .15s, color .15s; }
   .kt-add-btn:hover{ border-color:var(--red); color:var(--red-dark); }
-  .kt-image-panel{ min-height:220px; display:flex; align-items:center; justify-content:center; padding:14px; }
-  .kt-image-panel img{ max-width:100%; max-height:340px; object-fit:contain; border-radius:8px; }
+  .kt-image-panel{ min-height:260px; display:flex; align-items:center; justify-content:center; padding:14px; }
+  .kt-image-panel img{ max-width:100%; max-height:460px; object-fit:contain; border-radius:8px; }
+
+  /* ---------- KHỔ TRẢI: ô tìm kiếm kiểu mẫu ---------- */
+  .kt-style-search{ margin-bottom:10px; }
+
+  /* ---------- KHỔ TRẢI: breadcrumb dưới tiêu đề header ---------- */
+  .breadcrumb{ font-family:'JetBrains Mono', monospace; font-size:11.5px; color:var(--ink-soft); margin-top:3px; letter-spacing:0.02em; min-height:14px; }
+
+  /* ---------- KHỔ TRẢI: nút gạt kép "Bình thường / Túi nối" ---------- */
+  .kt-onepiece-toggle{ display:none; align-items:center; margin:-2px 0 14px; }
+  .kt-switch{ display:inline-flex; border:1.5px solid var(--line-strong); border-radius:100px; padding:3px; background:var(--surface-alt); }
+  .kt-switch-opt{ font-family:'Oswald', sans-serif; font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:0.03em; padding:8px 16px; border-radius:100px; border:none; background:transparent; color:var(--ink-soft); cursor:pointer; transition:background .15s, color .15s; }
+  .kt-switch-opt:hover{ color:var(--ink); }
+  .kt-switch-opt.active{ background:var(--red); color:var(--white); }
+  .kt-switch-opt.active:hover{ color:var(--white); }
+
   .kt-result{ margin-top:16px; border:1.5px solid var(--ink); border-radius:var(--radius); overflow:hidden; }
-  .kt-result-head{ background:var(--ink); color:var(--white); padding:9px 14px; font-family:'JetBrains Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; }
-  .kt-result-body{ padding:20px 16px; }
+  .kt-result-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--ink); color:var(--white); padding:9px 10px 9px 14px; font-family:'JetBrains Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; }
+  .kt-copy-btn{ display:flex; align-items:center; gap:5px; font-family:'Inter', sans-serif; text-transform:none; letter-spacing:0; font-size:11.5px; font-weight:600; padding:6px 11px; border-radius:6px; border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.08); color:var(--white); cursor:pointer; transition:background .15s; }
+  .kt-copy-btn:hover{ background:rgba(255,255,255,.2); }
+  .kt-copy-btn:disabled{ opacity:.35; cursor:not-allowed; }
+  .kt-result-body{ padding:22px 18px; }
   .kt-parts-list{ display:flex; flex-direction:column; gap:10px; }
   .kt-part-row{ position:relative; border:1.5px solid var(--line); border-radius:8px; padding:12px 36px 12px 12px; background:var(--surface-alt); display:flex; flex-direction:column; gap:8px; }
   .kt-part-row .row{ margin-bottom:0; }
@@ -135,9 +159,9 @@
   .kt-result-line + .kt-result-line{ margin-top:14px; padding-top:14px; border-top:1px dashed var(--line); }
   .kt-result-line-wrap{ display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
   .kt-result-label{ font-family:'Oswald', sans-serif; font-weight:600; font-size:12.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); min-width:52px; }
-  .kt-result-num{ font-family:'Oswald', sans-serif; font-weight:700; font-size:30px; color:var(--ink); }
-  .kt-result-x{ font-size:20px; color:var(--ink-faint); }
-  .kt-result-unit{ font-family:'Oswald', sans-serif; font-size:20px; font-weight:700; color:var(--red); margin-left:2px; }
+  .kt-result-num{ font-family:'Oswald', sans-serif; font-weight:700; font-size:36px; color:var(--ink); }
+  .kt-result-x{ font-size:22px; color:var(--ink-faint); }
+  .kt-result-unit{ font-family:'Oswald', sans-serif; font-size:22px; font-weight:700; color:var(--red); margin-left:2px; }
   /* ---------- KHỔ TRẢI: ghi chú / cảnh báo hiển thị kèm kết quả ---------- */
   .kt-note-box{ display:flex; align-items:flex-start; gap:8px; background:var(--amber-tint); border:1px solid var(--amber); border-radius:6px; padding:8px 12px; font-size:13px; color:var(--amber-dark); line-height:1.4; }
   .kt-note-box + .kt-note-box{ margin-top:8px; }
@@ -194,6 +218,7 @@
       </div>
       <div>
         <div class="tagline">Tính khổ trải</div>
+        <div class="breadcrumb" id="ktBreadcrumb"></div>
       </div>
     </div>
     <div class="user-bar" id="userBar">
@@ -215,24 +240,34 @@
             <div class="kt-cat-tabs" id="ktCatTabs"></div>
             <button class="kt-cat-add-tab" id="ktAddCategoryBtn" style="display:none;">+ Danh mục</button>
           </div>
+          <input type="text" class="kt-style-search" id="ktStyleSearch" placeholder="Tìm kiểu mẫu...">
           <div id="ktStyleList"></div>
           <button class="kt-add-btn" id="ktAddStyleBtn" style="display:none;">+ Thêm kiểu mới</button>
         </div>
 
-        <div class="kt-col-right">
-          <div class="card">
-            <h2>Ảnh minh họa</h2>
-            <div class="kt-image-panel" id="ktImagePanel">
-              <div class="empty" id="ktImageEmpty">Chọn kiểu mẫu để xem ảnh minh họa</div>
-              <img id="ktImageFull" style="display:none;">
-            </div>
+        <div class="card kt-col-mid">
+          <h2>Ảnh minh họa</h2>
+          <div class="kt-image-panel" id="ktImagePanel">
+            <div class="empty" id="ktImageEmpty">Chọn kiểu mẫu để xem ảnh minh họa</div>
+            <img id="ktImageFull" style="display:none;">
           </div>
+        </div>
 
+        <div class="kt-col-right">
           <div class="card">
             <h2>NHẬP KÍCH THƯỚC SẢN PHẨM (đơn vị tính mm)</h2>
             <div class="row" id="ktInputsRow"></div>
+            <div class="kt-onepiece-toggle" id="ktOnePieceToggle">
+              <div class="kt-switch" id="ktOnePieceSwitch">
+                <button type="button" class="kt-switch-opt active" data-val="0">Bình thường</button>
+                <button type="button" class="kt-switch-opt" data-val="1">Túi nối</button>
+              </div>
+            </div>
             <div class="kt-result">
-              <div class="kt-result-head">Khổ trải</div>
+              <div class="kt-result-head">
+                <span id="ktResultHeadText">Khổ trải</span>
+                <button class="kt-copy-btn" id="ktCopyResultBtn" type="button" disabled title="Sao chép kết quả">⧉ Sao chép</button>
+              </div>
               <div class="kt-result-body" id="ktResultBody">
                 <div class="empty">Chọn kiểu mẫu và nhập kích thước để tính khổ trải.</div>
               </div>
@@ -337,12 +372,13 @@
         <label>Tên danh mục</label>
         <input type="text" id="ktCatMName" placeholder="VD: Hộp cứng">
       </div>
-      <div class="field">
+      <div class="field" id="ktCatFieldsSection">
         <label>Các ô kích thước cần nhập</label>
         <div class="kt-catfields-list" id="ktCatFieldsList"></div>
         <div class="kt-hint">Mỗi ô gồm <b>Nhãn</b> (hiển thị, VD: Ngang) và <b>Biến</b> (dùng trong công thức, VD: <code>n</code> — chỉ chữ/số, không dấu, không khoảng trắng).</div>
       </div>
       <button class="btn-ghost btn-small" id="ktCatAddFieldBtn" type="button" style="align-self:flex-start;">+ Thêm ô kích thước</button>
+      <div class="kt-hint" id="ktCatBuiltinHint" style="display:none;">Đây là danh mục có sẵn của hệ thống nên chỉ đổi được tên hiển thị; các ô kích thước và công thức đang gắn với những kiểu mẫu hiện có nên không thể chỉnh sửa hay xóa.</div>
     </div>
     <div class="kt-modal-footer">
       <button class="btn-danger" id="ktCatMDeleteBtn" style="display:none;">Xóa danh mục này</button>
@@ -390,7 +426,13 @@ const KT_CATEGORIES = [
 ];
 const KT_BUILTIN_IDS = new Set(KT_CATEGORIES.map(c=>c.id));
 let ktCustomCategories = []; // danh mục do người dùng tạo thêm, lấy từ Supabase
-function ktAllCategories(){ return [...KT_CATEGORIES, ...ktCustomCategories]; }
+function ktAllCategories(){
+  const overrides = {};
+  ktCustomCategories.forEach(c=>{ if(KT_BUILTIN_IDS.has(c.id)) overrides[c.id] = c; });
+  const builtins = KT_CATEGORIES.map(c => overrides[c.id] ? { ...c, name: overrides[c.id].name || c.name } : c);
+  const trueCustom = ktCustomCategories.filter(c=>!KT_BUILTIN_IDS.has(c.id));
+  return [...builtins, ...trueCustom];
+}
 function ktGetCategory(catId){ return ktAllCategories().find(c=>c.id===catId) || KT_CATEGORIES[0]; }
 function ktGetFields(catId){ return ktGetCategory(catId).fields; }
 function ktSlugify(str){
@@ -409,6 +451,9 @@ let ktStyles = [];
 const ktImageCache = {};
 let ktActiveCategory = KT_CATEGORIES[0].id;
 let ktSelectedId = null;
+let ktOnePieceOn = false; // chế độ "Túi nối", chỉ dùng cho danh mục Túi giấy
+let ktStyleSearchQuery = ''; // từ khóa tìm kiểu mẫu trong danh mục đang chọn
+let ktLastResultText = ''; // kết quả khổ trải dạng text, dùng cho nút "Sao chép"
 let ktModalCtx = null; // { mode:'new'|'edit', id?, categoryId, currentImage, removeImage }
 let ktCatModalCtx = null; // { mode:'new'|'edit', id? }
 
@@ -435,7 +480,9 @@ async function loadAll(){
         label: p.label || '',
         ngangFormula: p.ngangFormula || p.ngang_formula || (Array.isArray(p.ngangRules) && p.ngangRules[0] && p.ngangRules[0].formula) || '',
         caoFormula: p.caoFormula || p.cao_formula || (Array.isArray(p.caoRules) && p.caoRules[0] && p.caoRules[0].formula) || '',
-      })) : [{ label:'', ngangFormula: r.ngang_formula || '', caoFormula: r.cao_formula || '' }];
+        oneNgangFormula: p.oneNgangFormula || p.one_ngang_formula || '',
+        oneCaoFormula: p.oneCaoFormula || p.one_cao_formula || '',
+      })) : [{ label:'', ngangFormula: r.ngang_formula || '', caoFormula: r.cao_formula || '', oneNgangFormula:'', oneCaoFormula:'' }];
       const noteRules = Array.isArray(r.note_rules) ? r.note_rules.map(n=>({
         field: n.field || '',
         min: (n.min===null || n.min===undefined || n.min==='') ? null : Number(n.min),
@@ -493,11 +540,23 @@ function resizeImage(file){
   });
 }
 
+/* ---------- KHỔ TRẢI: breadcrumb "Danh mục / Kiểu mẫu" dưới tiêu đề header ---------- */
+function updateKtBreadcrumb(){
+  const el = document.getElementById('ktBreadcrumb');
+  if(!el) return;
+  const cat = ktGetCategory(ktActiveCategory);
+  const sel = ktFindStyleById(ktSelectedId);
+  el.textContent = sel ? `${cat.name} / ${sel.name}` : (cat ? cat.name : '');
+}
+
 /* ---------- LOGO → VỀ TRANG CHỦ (reset lựa chọn khổ trải) ---------- */
 function goHome(){
   if(document.getElementById('mainApp').style.display === 'none') return; // đang tải dữ liệu thì bỏ qua
   ktSelectedId = null;
   ktActiveCategory = KT_CATEGORIES[0].id;
+  ktStyleSearchQuery = '';
+  const searchEl = document.getElementById('ktStyleSearch');
+  if(searchEl) searchEl.value = '';
   renderKtCatTabs();
   renderKtStyleList();
   renderKtImagePanel();
@@ -517,6 +576,9 @@ function ktFindStyleById(id){
 }
 function ktIsReady(style){
   return !!(style && Array.isArray(style.parts) && style.parts.length && style.parts.every(p=>p.ngangFormula && p.caoFormula));
+}
+function ktIsOnePieceReady(style){
+  return !!(style && Array.isArray(style.parts) && style.parts.length && style.parts.every(p=>p.oneNgangFormula && p.oneCaoFormula));
 }
 function ktEvalFormula(expr, vars){
   try{
@@ -553,7 +615,33 @@ function renderKtInputs(){
   el.querySelectorAll('[data-kt-input]').forEach(inp=>{
     inp.addEventListener('input', ktCompute);
   });
+  ktOnePieceOn = false;
+  const toggleWrap = document.getElementById('ktOnePieceToggle');
+  toggleWrap.classList.remove('active');
+  toggleWrap.style.display = (ktActiveCategory === 'tui-giay') ? 'flex' : 'none';
+  document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(b=>b.classList.toggle('active', b.dataset.val==='0'));
 }
+document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    ktOnePieceOn = btn.dataset.val === '1';
+    document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(b=>b.classList.toggle('active', b===btn));
+    document.getElementById('ktOnePieceToggle').classList.toggle('active', ktOnePieceOn);
+    ktCompute();
+  });
+});
+document.getElementById('ktStyleSearch').addEventListener('input', (e)=>{
+  ktStyleSearchQuery = e.target.value;
+  renderKtStyleList();
+});
+document.getElementById('ktCopyResultBtn').addEventListener('click', async ()=>{
+  if(!ktLastResultText) return;
+  try{
+    await navigator.clipboard.writeText(ktLastResultText);
+    showToast('Đã sao chép kết quả');
+  }catch(e){
+    showToast('Không thể sao chép, hãy thử lại');
+  }
+});
 function ktReadInputs(){
   const fields = ktGetFields(ktActiveCategory);
   const vars = {};
@@ -568,13 +656,17 @@ function renderKtCatTabs(){
   const isEditor = currentRole === 'editor';
   el.innerHTML = ktAllCategories().map(cat=>{
     const isCustom = !KT_BUILTIN_IDS.has(cat.id);
-    const editIcon = (isCustom && isEditor) ? `<span class="kt-cat-edit" data-cat-edit="${cat.id}" title="Sửa danh mục">✎</span>` : '';
+    const editIcon = isEditor ? `<span class="kt-cat-edit" data-cat-edit="${cat.id}" title="${isCustom ? 'Sửa danh mục' : 'Sửa tên danh mục'}">✎</span>` : '';
     return `<div class="kt-cat-tab${cat.id===ktActiveCategory?' active':''}" data-cat="${cat.id}"><span>${cat.name}</span>${editIcon}</div>`;
   }).join('');
   el.querySelectorAll('.kt-cat-tab').forEach(t=>{
     t.addEventListener('click', (e)=>{
       if(e.target.closest('[data-cat-edit]')) return;
-      ktActiveCategory = t.dataset.cat; ktSelectedId = null; renderKtCatTabs(); renderKtStyleList(); renderKtImagePanel(); renderKtInputs(); ktCompute();
+      ktActiveCategory = t.dataset.cat; ktSelectedId = null;
+      ktStyleSearchQuery = '';
+      const searchEl = document.getElementById('ktStyleSearch');
+      if(searchEl) searchEl.value = '';
+      renderKtCatTabs(); renderKtStyleList(); renderKtImagePanel(); renderKtInputs(); ktCompute();
     });
   });
   el.querySelectorAll('[data-cat-edit]').forEach(btn=>{
@@ -585,9 +677,11 @@ function renderKtCatTabs(){
 }
 function renderKtStyleList(){
   const el = document.getElementById('ktStyleList');
-  const styles = ktGetCategoryStyles(ktActiveCategory);
+  let styles = ktGetCategoryStyles(ktActiveCategory);
+  const q = ktStyleSearchQuery.trim().toLowerCase();
+  if(q) styles = styles.filter(s=>s.name.toLowerCase().includes(q));
   if(styles.length===0){
-    el.innerHTML = '<div class="empty">Chưa có kiểu mẫu nào trong danh mục này.</div>';
+    el.innerHTML = `<div class="empty">${q ? 'Không tìm thấy kiểu mẫu phù hợp.' : 'Chưa có kiểu mẫu nào trong danh mục này.'}</div>`;
     return;
   }
   const isEditor = currentRole === 'editor';
@@ -640,20 +734,35 @@ async function renderKtImagePanel(){
     emptyEl.style.display = 'none';
   }
 }
+function updateKtCopyBtn(){
+  const btn = document.getElementById('ktCopyResultBtn');
+  if(btn) btn.disabled = !ktLastResultText;
+}
 function ktCompute(){
   const body = document.getElementById('ktResultBody');
+  const headText = document.getElementById('ktResultHeadText');
   const sel = ktFindStyleById(ktSelectedId);
   const fields = ktGetFields(ktActiveCategory);
   const vars = ktReadInputs();
-  if(!sel){ body.innerHTML = '<div class="empty">Chọn kiểu mẫu và nhập kích thước để tính khổ trải.</div>'; return; }
-  if(!ktIsReady(sel)){ body.innerHTML = `<div class="empty">Kiểu "${sel.name}" chưa có công thức tính. ${currentRole==='editor' ? 'Bấm ✎ để nhập công thức.' : ''}</div>`; return; }
+  const onePiece = ktOnePieceOn && ktActiveCategory === 'tui-giay';
+  headText.textContent = onePiece ? 'Khổ trải · Túi nối' : 'Khổ trải';
+  updateKtBreadcrumb();
+  if(!sel){ body.innerHTML = '<div class="empty">Chọn kiểu mẫu và nhập kích thước để tính khổ trải.</div>'; ktLastResultText=''; updateKtCopyBtn(); return; }
+  if(onePiece){
+    if(!ktIsOnePieceReady(sel)){ body.innerHTML = `<div class="empty">Kiểu "${sel.name}" chưa có công thức "Túi nối". ${currentRole==='editor' ? 'Bấm ✎ để nhập công thức.' : ''}</div>`; ktLastResultText=''; updateKtCopyBtn(); return; }
+  } else {
+    if(!ktIsReady(sel)){ body.innerHTML = `<div class="empty">Kiểu "${sel.name}" chưa có công thức tính. ${currentRole==='editor' ? 'Bấm ✎ để nhập công thức.' : ''}</div>`; ktLastResultText=''; updateKtCopyBtn(); return; }
+  }
   const missing = fields.some(f=>isNaN(vars[f.key]));
-  if(missing){ body.innerHTML = `<div class="empty">Nhập đủ ${fields.map(f=>f.label).join(' / ')} để tính.</div>`; return; }
+  if(missing){ body.innerHTML = `<div class="empty">Nhập đủ ${fields.map(f=>f.label).join(' / ')} để tính.</div>`; ktLastResultText=''; updateKtCopyBtn(); return; }
   const lines = [];
+  const textLines = [];
   for(const part of sel.parts){
-    const ngangTrai = ktEvalFormula(part.ngangFormula, vars);
-    const caoTrai = ktEvalFormula(part.caoFormula, vars);
-    if(isNaN(ngangTrai) || isNaN(caoTrai)){ body.innerHTML = '<div class="empty">Công thức của kiểu này chưa hợp lệ.</div>'; return; }
+    const ngangFormula = onePiece ? part.oneNgangFormula : part.ngangFormula;
+    const caoFormula = onePiece ? part.oneCaoFormula : part.caoFormula;
+    const ngangTrai = ktEvalFormula(ngangFormula, vars);
+    const caoTrai = ktEvalFormula(caoFormula, vars);
+    if(isNaN(ngangTrai) || isNaN(caoTrai)){ body.innerHTML = '<div class="empty">Công thức của kiểu này chưa hợp lệ.</div>'; ktLastResultText=''; updateKtCopyBtn(); return; }
     lines.push(`
       <div class="kt-result-line">
         <div class="kt-result-line-wrap">
@@ -662,6 +771,7 @@ function ktCompute(){
         </div>
       </div>
     `);
+    textLines.push(`${part.label || 'Khổ trải'}: ${ktFmt(ngangTrai)} x ${ktFmt(caoTrai)}mm`);
   }
   const notes = ktMatchedNotes(sel, vars);
   if(notes.length){
@@ -670,6 +780,8 @@ function ktCompute(){
     `).join(''));
   }
   body.innerHTML = lines.join('');
+  ktLastResultText = textLines.join('\n');
+  updateKtCopyBtn();
 }
 
 /* ---------- KHỔ TRẢI: modal thêm / sửa kiểu ---------- */
@@ -686,15 +798,21 @@ const ktSaveStatus = document.getElementById('ktSaveStatus');
 const ktMPartsList = document.getElementById('ktMPartsList');
 let ktMPartRows = []; // [{label, ngangFormula, caoFormula}] đang chỉnh trong modal
 
+function ktModalIsTuiGiay(){ return ktMCategory.value === 'tui-giay'; }
 function updateKtModalHint(){
   const fields = ktGetFields(ktMCategory.value);
   const varList = fields.map(f=>`<code>${f.key}</code> (${f.label})`).join(', ');
-  document.getElementById('ktMFormulaHint').innerHTML = `Dùng biến ${varList}. Nếu sản phẩm có nhiều thành phần (VD: hộp âm dương gồm Đáy + Nắp), bấm "+ Thêm thành phần" để mỗi thành phần có công thức và kết quả riêng.`;
+  let hint = `Dùng biến ${varList}. Nếu sản phẩm có nhiều thành phần (VD: hộp âm dương gồm Đáy + Nắp), bấm "+ Thêm thành phần" để mỗi thành phần có công thức và kết quả riêng.`;
+  if(ktModalIsTuiGiay()){
+    hint += ` Với danh mục Túi giấy, có thể nhập thêm công thức "Túi nối" — khi người xem gạt sang chế độ "Túi nối" ở ngoài trang chính, khổ trải sẽ tính theo công thức riêng này thay vì công thức thường.`;
+  }
+  document.getElementById('ktMFormulaHint').innerHTML = hint;
 }
 function ktRenderPartRows(){
   const fields = ktGetFields(ktMCategory.value);
   const ngangPh = 'VD: (' + fields.map(f=>f.key).join('*2)+(') + '*2)';
   const caoPh = 'VD: ' + fields.map(f=>f.key).join('+');
+  const showOnePiece = ktModalIsTuiGiay();
   ktMPartsList.innerHTML = ktMPartRows.map((p, i)=>`
     <div class="kt-part-row" data-idx="${i}">
       ${ktMPartRows.length>1 ? `<button type="button" class="kt-part-remove" data-part-remove="${i}" title="Xóa thành phần này">&times;</button>` : ''}
@@ -714,6 +832,18 @@ function ktRenderPartRows(){
           <input type="text" data-part-cao="${i}" value="${(p.caoFormula||'').replace(/"/g,'&quot;')}" placeholder="${caoPh}">
         </div>
       </div>
+      ${showOnePiece ? `
+      <div class="row">
+        <div class="field">
+          <label>Công thức Ngang trải · Túi nối</label>
+          <input type="text" data-part-one-ngang="${i}" value="${(p.oneNgangFormula||'').replace(/"/g,'&quot;')}" placeholder="${ngangPh}">
+        </div>
+        <div class="field">
+          <label>Công thức Cao trải · Túi nối</label>
+          <input type="text" data-part-one-cao="${i}" value="${(p.oneCaoFormula||'').replace(/"/g,'&quot;')}" placeholder="${caoPh}">
+        </div>
+      </div>
+      ` : ''}
     </div>
   `).join('');
   ktMPartsList.querySelectorAll('[data-part-label]').forEach(inp=>{
@@ -725,6 +855,12 @@ function ktRenderPartRows(){
   ktMPartsList.querySelectorAll('[data-part-cao]').forEach(inp=>{
     inp.addEventListener('input', ()=>{ ktMPartRows[+inp.dataset.partCao].caoFormula = inp.value; });
   });
+  ktMPartsList.querySelectorAll('[data-part-one-ngang]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{ ktMPartRows[+inp.dataset.partOneNgang].oneNgangFormula = inp.value; });
+  });
+  ktMPartsList.querySelectorAll('[data-part-one-cao]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{ ktMPartRows[+inp.dataset.partOneCao].oneCaoFormula = inp.value; });
+  });
   ktMPartsList.querySelectorAll('[data-part-remove]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       if(ktMPartRows.length<=1){ showToast('Cần ít nhất 1 thành phần'); return; }
@@ -734,7 +870,7 @@ function ktRenderPartRows(){
   });
 }
 document.getElementById('ktMAddPartBtn').addEventListener('click', ()=>{
-  ktMPartRows.push({ label:'', ngangFormula:'', caoFormula:'' });
+  ktMPartRows.push({ label:'', ngangFormula:'', caoFormula:'', oneNgangFormula:'', oneCaoFormula:'' });
   ktRenderPartRows();
 });
 
@@ -836,7 +972,7 @@ function openKtModal(ctx){
     ktMCategory.value = ctx.categoryId;
     ktMCategory.disabled = false;
     ktMName.value = '';
-    ktMPartRows = [{ label:'', ngangFormula:'', caoFormula:'' }];
+    ktMPartRows = [{ label:'', ngangFormula:'', caoFormula:'', oneNgangFormula:'', oneCaoFormula:'' }];
     ktMNoteRuleRows = [];
     ktMDeleteBtn.style.display = 'none';
   } else {
@@ -846,7 +982,7 @@ function openKtModal(ctx){
     ktMCategory.value = found.categoryId;
     ktMCategory.disabled = true;
     ktMName.value = found.name;
-    ktMPartRows = found.parts.map(p=>({ label:p.label||'', ngangFormula:p.ngangFormula||'', caoFormula:p.caoFormula||'' }));
+    ktMPartRows = found.parts.map(p=>({ label:p.label||'', ngangFormula:p.ngangFormula||'', caoFormula:p.caoFormula||'', oneNgangFormula:p.oneNgangFormula||'', oneCaoFormula:p.oneCaoFormula||'' }));
     ktMNoteRuleRows = (found.noteRules||[]).map(r=>({ field:r.field||'', min: r.min===null||r.min===undefined ? '' : r.min, max: r.max===null||r.max===undefined ? '' : r.max, text:r.text||'' }));
     ktModalCtx.hadImage = found.hasImage;
     ktMDeleteBtn.style.display = '';
@@ -935,7 +1071,7 @@ ktMClearImg.addEventListener('click', ()=>{
 document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
   const name = ktMName.value.trim();
   if(!name){ ktSaveStatus.textContent = 'Nhập tên kiểu trước đã.'; return; }
-  const cleanParts = ktMPartRows.map(p=>({ label:(p.label||'').trim(), ngangFormula:(p.ngangFormula||'').trim(), caoFormula:(p.caoFormula||'').trim() }));
+  const cleanParts = ktMPartRows.map(p=>({ label:(p.label||'').trim(), ngangFormula:(p.ngangFormula||'').trim(), caoFormula:(p.caoFormula||'').trim(), oneNgangFormula:(p.oneNgangFormula||'').trim(), oneCaoFormula:(p.oneCaoFormula||'').trim() }));
   if(cleanParts.length>1 && cleanParts.some(p=>!p.label)){ ktSaveStatus.textContent = 'Nhập tên cho từng thành phần (VD: Đáy, Nắp).'; return; }
   const testFields = ktGetFields(ktMCategory.value);
   const testVars = {};
@@ -943,6 +1079,8 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
   for(const p of cleanParts){
     if(p.ngangFormula && isNaN(ktEvalFormula(p.ngangFormula, testVars))){ ktSaveStatus.textContent = `Công thức Ngang trải${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ.`; return; }
     if(p.caoFormula && isNaN(ktEvalFormula(p.caoFormula, testVars))){ ktSaveStatus.textContent = `Công thức Cao trải${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ.`; return; }
+    if(p.oneNgangFormula && isNaN(ktEvalFormula(p.oneNgangFormula, testVars))){ ktSaveStatus.textContent = `Công thức Ngang trải Túi nối${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ.`; return; }
+    if(p.oneCaoFormula && isNaN(ktEvalFormula(p.oneCaoFormula, testVars))){ ktSaveStatus.textContent = `Công thức Cao trải Túi nối${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ.`; return; }
   }
   const cleanNoteRules = ktMNoteRuleRows
     .map(r=>({
@@ -1068,6 +1206,11 @@ document.getElementById('ktCatAddFieldBtn').addEventListener('click', ()=>{
 function openKtCatModal(ctx){
   ktCatModalCtx = { ...ctx };
   ktCatSaveStatus.textContent = '';
+  const isBuiltin = ctx.mode === 'edit' && KT_BUILTIN_IDS.has(ctx.id);
+  ktCatModalCtx.isBuiltin = isBuiltin;
+  document.getElementById('ktCatFieldsSection').style.display = isBuiltin ? 'none' : '';
+  document.getElementById('ktCatAddFieldBtn').style.display = isBuiltin ? 'none' : '';
+  document.getElementById('ktCatBuiltinHint').style.display = isBuiltin ? '' : 'none';
   if(ctx.mode==='new'){
     document.getElementById('ktCatModalTitle').textContent = 'Thêm danh mục mới';
     ktCatMName.value = '';
@@ -1075,10 +1218,10 @@ function openKtCatModal(ctx){
     ktCatMDeleteBtn.style.display = 'none';
   } else {
     const found = ktGetCategory(ctx.id);
-    document.getElementById('ktCatModalTitle').textContent = 'Sửa danh mục';
+    document.getElementById('ktCatModalTitle').textContent = isBuiltin ? 'Sửa tên danh mục' : 'Sửa danh mục';
     ktCatMName.value = found.name;
     ktCatFieldRows = found.fields.map(f=>({ label:f.label, key:f.key }));
-    ktCatMDeleteBtn.style.display = '';
+    ktCatMDeleteBtn.style.display = isBuiltin ? 'none' : '';
   }
   ktCatRenderFieldRows();
   ktCatModalOverlay.classList.add('open');
@@ -1095,15 +1238,22 @@ document.getElementById('ktAddCategoryBtn').addEventListener('click', ()=> openK
 document.getElementById('ktCatMSaveBtn').addEventListener('click', async ()=>{
   const name = ktCatMName.value.trim();
   if(!name){ ktCatSaveStatus.textContent = 'Nhập tên danh mục trước đã.'; return; }
-  const cleanRows = ktCatFieldRows.map(f=>({ label:(f.label||'').trim(), key:(f.key||'').trim() }));
-  if(cleanRows.length===0 || cleanRows.some(f=>!f.label || !f.key)){ ktCatSaveStatus.textContent = 'Điền đủ Nhãn và Biến cho mọi ô.'; return; }
-  if(cleanRows.some(f=>!/^[a-zA-Z][a-zA-Z0-9]*$/.test(f.key))){ ktCatSaveStatus.textContent = 'Biến chỉ gồm chữ/số, bắt đầu bằng chữ, không dấu/khoảng trắng.'; return; }
-  const keySet = new Set(cleanRows.map(f=>f.key));
-  if(keySet.size !== cleanRows.length){ ktCatSaveStatus.textContent = 'Các Biến phải khác nhau.'; return; }
+  const isBuiltin = ktCatModalCtx.isBuiltin;
+  let cleanRows = [];
+  if(!isBuiltin){
+    cleanRows = ktCatFieldRows.map(f=>({ label:(f.label||'').trim(), key:(f.key||'').trim() }));
+    if(cleanRows.length===0 || cleanRows.some(f=>!f.label || !f.key)){ ktCatSaveStatus.textContent = 'Điền đủ Nhãn và Biến cho mọi ô.'; return; }
+    if(cleanRows.some(f=>!/^[a-zA-Z][a-zA-Z0-9]*$/.test(f.key))){ ktCatSaveStatus.textContent = 'Biến chỉ gồm chữ/số, bắt đầu bằng chữ, không dấu/khoảng trắng.'; return; }
+    const keySet = new Set(cleanRows.map(f=>f.key));
+    if(keySet.size !== cleanRows.length){ ktCatSaveStatus.textContent = 'Các Biến phải khác nhau.'; return; }
+  }
 
   ktCatSaveStatus.textContent = 'Đang lưu…';
   try{
-    if(ktCatModalCtx.mode==='new'){
+    if(isBuiltin){
+      const {error} = await sbClient.from('khotrai_categories').upsert({ id: ktCatModalCtx.id, name, fields: [] }, { onConflict: 'id' });
+      if(error) throw error;
+    } else if(ktCatModalCtx.mode==='new'){
       const id = ktUniqueCategoryId(name);
       const {error} = await sbClient.from('khotrai_categories').insert({ id, name, fields: cleanRows });
       if(error) throw error;
@@ -1128,7 +1278,7 @@ document.getElementById('ktCatMSaveBtn').addEventListener('click', async ()=>{
 });
 
 ktCatMDeleteBtn.addEventListener('click', async ()=>{
-  if(!ktCatModalCtx || ktCatModalCtx.mode!=='edit') return;
+  if(!ktCatModalCtx || ktCatModalCtx.mode!=='edit' || ktCatModalCtx.isBuiltin) return;
   const hasStyles = ktGetCategoryStyles(ktCatModalCtx.id).length > 0;
   if(hasStyles){ ktCatSaveStatus.textContent = 'Danh mục đang có kiểu mẫu, hãy xóa hết kiểu mẫu trước.'; return; }
   if(!confirm('Xóa danh mục này?')) return;
