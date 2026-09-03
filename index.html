@@ -113,6 +113,8 @@
   .kt-catfield-row .field.kt-catfield-key input{ font-family:'JetBrains Mono', monospace; }
   .kt-catfield-remove{ width:36px; height:36px; flex-shrink:0; border-radius:6px; border:1px solid var(--line-strong); background:var(--white); color:var(--ink-soft); font-size:15px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
   .kt-catfield-remove:hover{ background:var(--red-tint); color:var(--red-dark); border-color:var(--red); }
+  .kt-catfield-locked{ width:36px; height:36px; flex-shrink:0; border-radius:6px; border:1px solid var(--line); background:var(--surface-alt); color:var(--ink-faint); font-size:14px; display:flex; align-items:center; justify-content:center; cursor:default; }
+  .kt-catfield-row input:disabled{ background:var(--surface-alt); color:var(--ink-faint); cursor:not-allowed; }
   .kt-catfields-list{ display:flex; flex-direction:column; gap:8px; }
   .kt-style-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; margin-bottom:8px; border:1.5px solid var(--line); border-radius:var(--radius); background:var(--white); cursor:pointer; transition:border-color .15s, background .15s; }
   .kt-style-row:hover{ border-color:var(--red); }
@@ -375,7 +377,7 @@
         <div class="kt-hint">Mỗi ô gồm <b>Nhãn</b> (hiển thị, VD: Ngang) và <b>Biến</b> (dùng trong công thức, VD: <code>n</code> — chỉ chữ/số, không dấu, không khoảng trắng).</div>
       </div>
       <button class="btn-ghost btn-small" id="ktCatAddFieldBtn" type="button" style="align-self:flex-start;">+ Thêm ô kích thước</button>
-      <div class="kt-hint" id="ktCatBuiltinHint" style="display:none;">Đây là danh mục có sẵn của hệ thống nên chỉ đổi được tên hiển thị; các ô kích thước và công thức đang gắn với những kiểu mẫu hiện có nên không thể chỉnh sửa hay xóa.</div>
+      <div class="kt-hint" id="ktCatBuiltinHint" style="display:none;">Đây là danh mục có sẵn của hệ thống. Các ô kích thước (🔒) đang gắn với công thức của những kiểu mẫu hiện có thì không thể sửa hay xóa; các ô còn lại vẫn có thể thêm, sửa hoặc xóa bình thường.</div>
     </div>
     <div class="kt-modal-footer">
       <button class="btn-danger" id="ktCatMDeleteBtn" style="display:none;">Xóa danh mục này</button>
@@ -426,12 +428,35 @@ let ktCustomCategories = []; // danh mục do người dùng tạo thêm, lấy 
 function ktAllCategories(){
   const overrides = {};
   ktCustomCategories.forEach(c=>{ if(KT_BUILTIN_IDS.has(c.id)) overrides[c.id] = c; });
-  const builtins = KT_CATEGORIES.map(c => overrides[c.id] ? { ...c, name: overrides[c.id].name || c.name } : c);
+  const builtins = KT_CATEGORIES.map(c => overrides[c.id] ? { ...c, name: overrides[c.id].name || c.name, fields: (Array.isArray(overrides[c.id].fields) && overrides[c.id].fields.length) ? overrides[c.id].fields : c.fields } : c);
   const trueCustom = ktCustomCategories.filter(c=>!KT_BUILTIN_IDS.has(c.id));
   return [...builtins, ...trueCustom];
 }
-function ktGetCategory(catId){ return ktAllCategories().find(c=>c.id===catId) || KT_CATEGORIES[0]; }
-function ktGetFields(catId){ return ktGetCategory(catId).fields; }
+function ktGetCategory(catId){
+  if(catId==null) return null;
+  return ktAllCategories().find(c=>c.id===catId) || KT_CATEGORIES[0];
+}
+function ktGetFields(catId){ const cat = ktGetCategory(catId); return cat ? cat.fields : []; }
+/* Trả về tập hợp các "biến" (key) đang được dùng trong công thức/ghi chú của các kiểu mẫu
+   thuộc danh mục catId — những ô kích thước có key nằm trong tập này không được sửa/xóa. */
+function ktCategoryUsedFieldKeys(catId){
+  const used = new Set();
+  const styles = ktGetCategoryStyles(catId);
+  const formulaTexts = [];
+  styles.forEach(s=>{
+    (s.parts||[]).forEach(p=>{
+      formulaTexts.push(p.ngangFormula, p.caoFormula, p.oneNgangFormula, p.oneCaoFormula);
+    });
+    (s.noteRules||[]).forEach(r=>{ if(r.field) used.add(r.field); });
+  });
+  const combined = formulaTexts.filter(Boolean).join(' \n ');
+  ktGetFields(catId).forEach(f=>{
+    if(!f.key) return;
+    const re = new RegExp('\\b'+f.key.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b');
+    if(re.test(combined)) used.add(f.key);
+  });
+  return used;
+}
 function ktSlugify(str){
   return (str||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/đ/gi, m=> m==='đ' ? 'd' : 'D')
@@ -446,7 +471,7 @@ function ktUniqueCategoryId(name){
 }
 let ktStyles = [];
 const ktImageCache = {};
-let ktActiveCategory = KT_CATEGORIES[0].id;
+let ktActiveCategory = null;
 let ktSelectedId = null;
 let ktOnePieceOn = false; // chế độ "Túi nối", chỉ dùng cho danh mục Túi giấy
 let ktStyleSearchQuery = ''; // từ khóa tìm kiểu mẫu trong danh mục đang chọn
@@ -550,7 +575,7 @@ function updateKtBreadcrumb(){
 function goHome(){
   if(document.getElementById('mainApp').style.display === 'none') return; // đang tải dữ liệu thì bỏ qua
   ktSelectedId = null;
-  ktActiveCategory = KT_CATEGORIES[0].id;
+  ktActiveCategory = null;
   ktStyleSearchQuery = '';
   renderKtCatAccordion();
   renderKtImagePanel();
@@ -697,6 +722,7 @@ function renderKtCatAccordion(){
 }
 function renderKtStyleList(){
   const el = document.getElementById('ktStyleList');
+  if(!el) return; // chưa có danh mục nào được mở
   let styles = ktGetCategoryStyles(ktActiveCategory);
   const q = ktStyleSearchQuery.trim().toLowerCase();
   if(q) styles = styles.filter(s=>s.name.toLowerCase().includes(q));
@@ -1193,13 +1219,15 @@ function ktCatRenderFieldRows(){
     <div class="kt-catfield-row" data-idx="${i}">
       <div class="field">
         <label>Nhãn</label>
-        <input type="text" data-cf-label="${i}" value="${(f.label||'').replace(/"/g,'&quot;')}" placeholder="VD: Ngang">
+        <input type="text" data-cf-label="${i}" value="${(f.label||'').replace(/"/g,'&quot;')}" placeholder="VD: Ngang" ${f.locked ? 'disabled' : ''}>
       </div>
       <div class="field kt-catfield-key">
         <label>Biến</label>
-        <input type="text" data-cf-key="${i}" value="${(f.key||'').replace(/"/g,'&quot;')}" placeholder="VD: n">
+        <input type="text" data-cf-key="${i}" value="${(f.key||'').replace(/"/g,'&quot;')}" placeholder="VD: n" ${f.locked ? 'disabled' : ''}>
       </div>
-      <button type="button" class="kt-catfield-remove" data-cf-remove="${i}" title="Xóa ô này">&times;</button>
+      ${f.locked
+        ? `<span class="kt-catfield-locked" title="Ô này đang gắn với công thức của kiểu mẫu hiện có nên không thể sửa hay xóa">🔒</span>`
+        : `<button type="button" class="kt-catfield-remove" data-cf-remove="${i}" title="Xóa ô này">&times;</button>`}
     </div>
   `).join('');
   ktCatFieldsList.querySelectorAll('[data-cf-label]').forEach(inp=>{
@@ -1217,7 +1245,7 @@ function ktCatRenderFieldRows(){
   });
 }
 document.getElementById('ktCatAddFieldBtn').addEventListener('click', ()=>{
-  ktCatFieldRows.push({ label:'', key:'' });
+  ktCatFieldRows.push({ label:'', key:'', locked:false });
   ktCatRenderFieldRows();
 });
 function openKtCatModal(ctx){
@@ -1225,19 +1253,20 @@ function openKtCatModal(ctx){
   ktCatSaveStatus.textContent = '';
   const isBuiltin = ctx.mode === 'edit' && KT_BUILTIN_IDS.has(ctx.id);
   ktCatModalCtx.isBuiltin = isBuiltin;
-  document.getElementById('ktCatFieldsSection').style.display = isBuiltin ? 'none' : '';
-  document.getElementById('ktCatAddFieldBtn').style.display = isBuiltin ? 'none' : '';
+  document.getElementById('ktCatFieldsSection').style.display = '';
+  document.getElementById('ktCatAddFieldBtn').style.display = '';
   document.getElementById('ktCatBuiltinHint').style.display = isBuiltin ? '' : 'none';
   if(ctx.mode==='new'){
     document.getElementById('ktCatModalTitle').textContent = 'Thêm danh mục mới';
     ktCatMName.value = '';
-    ktCatFieldRows = [{ label:'Ngang', key:'n' }, { label:'Hông', key:'h' }, { label:'Cao', key:'c' }];
+    ktCatFieldRows = [{ label:'Ngang', key:'n', locked:false }, { label:'Hông', key:'h', locked:false }, { label:'Cao', key:'c', locked:false }];
     ktCatMDeleteBtn.style.display = 'none';
   } else {
     const found = ktGetCategory(ctx.id);
-    document.getElementById('ktCatModalTitle').textContent = isBuiltin ? 'Sửa tên danh mục' : 'Sửa danh mục';
+    const usedKeys = ktCategoryUsedFieldKeys(ctx.id);
+    document.getElementById('ktCatModalTitle').textContent = isBuiltin ? 'Sửa danh mục' : 'Sửa danh mục';
     ktCatMName.value = found.name;
-    ktCatFieldRows = found.fields.map(f=>({ label:f.label, key:f.key }));
+    ktCatFieldRows = found.fields.map(f=>({ label:f.label, key:f.key, locked: usedKeys.has(f.key) }));
     ktCatMDeleteBtn.style.display = isBuiltin ? 'none' : '';
   }
   ktCatRenderFieldRows();
@@ -1256,19 +1285,16 @@ document.getElementById('ktCatMSaveBtn').addEventListener('click', async ()=>{
   const name = ktCatMName.value.trim();
   if(!name){ ktCatSaveStatus.textContent = 'Nhập tên danh mục trước đã.'; return; }
   const isBuiltin = ktCatModalCtx.isBuiltin;
-  let cleanRows = [];
-  if(!isBuiltin){
-    cleanRows = ktCatFieldRows.map(f=>({ label:(f.label||'').trim(), key:(f.key||'').trim() }));
-    if(cleanRows.length===0 || cleanRows.some(f=>!f.label || !f.key)){ ktCatSaveStatus.textContent = 'Điền đủ Nhãn và Biến cho mọi ô.'; return; }
-    if(cleanRows.some(f=>!/^[a-zA-Z][a-zA-Z0-9]*$/.test(f.key))){ ktCatSaveStatus.textContent = 'Biến chỉ gồm chữ/số, bắt đầu bằng chữ, không dấu/khoảng trắng.'; return; }
-    const keySet = new Set(cleanRows.map(f=>f.key));
-    if(keySet.size !== cleanRows.length){ ktCatSaveStatus.textContent = 'Các Biến phải khác nhau.'; return; }
-  }
+  const cleanRows = ktCatFieldRows.map(f=>({ label:(f.label||'').trim(), key:(f.key||'').trim() }));
+  if(cleanRows.length===0 || cleanRows.some(f=>!f.label || !f.key)){ ktCatSaveStatus.textContent = 'Điền đủ Nhãn và Biến cho mọi ô.'; return; }
+  if(cleanRows.some(f=>!/^[a-zA-Z][a-zA-Z0-9]*$/.test(f.key))){ ktCatSaveStatus.textContent = 'Biến chỉ gồm chữ/số, bắt đầu bằng chữ, không dấu/khoảng trắng.'; return; }
+  const keySet = new Set(cleanRows.map(f=>f.key));
+  if(keySet.size !== cleanRows.length){ ktCatSaveStatus.textContent = 'Các Biến phải khác nhau.'; return; }
 
   ktCatSaveStatus.textContent = 'Đang lưu…';
   try{
     if(isBuiltin){
-      const {error} = await sbClient.from('khotrai_categories').upsert({ id: ktCatModalCtx.id, name, fields: [] }, { onConflict: 'id' });
+      const {error} = await sbClient.from('khotrai_categories').upsert({ id: ktCatModalCtx.id, name, fields: cleanRows }, { onConflict: 'id' });
       if(error) throw error;
     } else if(ktCatModalCtx.mode==='new'){
       const id = ktUniqueCategoryId(name);
