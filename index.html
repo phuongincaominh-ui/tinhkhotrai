@@ -116,6 +116,11 @@
   .kt-catfield-locked{ width:36px; height:36px; flex-shrink:0; border-radius:6px; border:1px solid var(--line); background:var(--surface-alt); color:var(--ink-faint); font-size:14px; display:flex; align-items:center; justify-content:center; cursor:default; }
   .kt-catfield-row input:disabled{ background:var(--surface-alt); color:var(--ink-faint); cursor:not-allowed; }
   .kt-catfields-list{ display:flex; flex-direction:column; gap:8px; }
+  .kt-fieldsuse-list{ display:flex; flex-wrap:wrap; gap:8px; }
+  .kt-fieldsuse-item{ display:flex; align-items:center; gap:6px; padding:7px 12px; border:1px solid var(--line-strong); border-radius:100px; background:var(--white); cursor:pointer; font-size:13px; user-select:none; transition:border-color .15s, background .15s; }
+  .kt-fieldsuse-item:hover{ border-color:var(--ink-faint); }
+  .kt-fieldsuse-item input{ width:auto; margin:0; accent-color:var(--red); }
+  .kt-fieldsuse-item.checked{ border-color:var(--ink); background:var(--surface-alt); font-weight:600; }
   .kt-style-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; margin-bottom:8px; border:1.5px solid var(--line); border-radius:var(--radius); background:var(--white); cursor:pointer; transition:border-color .15s, background .15s; }
   .kt-style-row:hover{ border-color:var(--red); }
   .kt-style-row.selected{ background:var(--ink); border-color:var(--ink); }
@@ -322,6 +327,11 @@
         <input type="text" id="ktMName" placeholder="VD: Hộp đáy chọt">
       </div>
       <div class="field">
+        <label>Ô kích thước dùng cho kiểu này</label>
+        <div class="kt-hint">Chỉ những ô được tick mới hiện ra ở ngoài trang chính khi chọn kiểu này, và chỉ những ô này mới dùng được trong công thức bên dưới. Thêm ô mới vào danh mục sẽ không tự động hiện thêm ở các kiểu đã có sẵn.</div>
+        <div class="kt-fieldsuse-list" id="ktMFieldsUseList"></div>
+      </div>
+      <div class="field">
         <label>Ảnh minh họa</label>
         <div class="img-dropzone" id="ktImgDropzone" tabindex="0">
           <img id="ktMImgPreview" class="img-preview" style="display:none;">
@@ -448,6 +458,7 @@ function ktCategoryUsedFieldKeys(catId){
       formulaTexts.push(p.ngangFormula, p.caoFormula, p.oneNgangFormula, p.oneCaoFormula);
     });
     (s.noteRules||[]).forEach(r=>{ if(r.field) used.add(r.field); });
+    (s.activeFields||[]).forEach(k=>{ if(k) used.add(k); });
   });
   const combined = formulaTexts.filter(Boolean).join(' \n ');
   ktGetFields(catId).forEach(f=>{
@@ -489,7 +500,12 @@ function showToast(msg){
 /* ---------- STORAGE (Supabase) ---------- */
 async function loadAll(){
   try{
-    let res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules');
+    let res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules,active_fields');
+    if(res.error && /active_fields/i.test(res.error.message||'')){
+      // Cột active_fields chưa được tạo trên Supabase -> tải lại không kèm cột này (mọi kiểu mẫu sẽ tạm dùng toàn bộ ô của danh mục).
+      console.warn('Cột active_fields chưa tồn tại trên Supabase, tạm bỏ qua (mọi kiểu mẫu dùng toàn bộ ô kích thước của danh mục).');
+      res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules');
+    }
     if(res.error && /note_rules/i.test(res.error.message||'')){
       // Cột note_rules chưa được tạo trên Supabase -> tải lại không kèm cột này để không mất dữ liệu hiện có.
       console.warn('Cột note_rules chưa tồn tại trên Supabase, tạm bỏ qua ghi chú theo điều kiện.');
@@ -511,7 +527,8 @@ async function loadAll(){
         max: (n.max===null || n.max===undefined || n.max==='') ? null : Number(n.max),
         text: n.text || '',
       })) : [];
-      return { id:r.id, categoryId:r.category_id, name:r.name, hasImage: !!r.has_image, parts, noteRules };
+      const activeFields = Array.isArray(r.active_fields) && r.active_fields.length ? r.active_fields : null;
+      return { id:r.id, categoryId:r.category_id, name:r.name, hasImage: !!r.has_image, parts, noteRules, activeFields };
     });
   }catch(e){ ktStyles = []; console.error('loadAll khotrai_styles:', e); showToast('Lỗi tải danh mục khổ trải'); }
   try{
@@ -609,6 +626,18 @@ function ktEvalFormula(expr, vars){
   }catch(e){ return NaN; }
 }
 function ktFmt(v){ return (Math.round(v*100)/100).toLocaleString('vi-VN'); }
+/* Trả về danh sách ô kích thước sẽ hiện ra ngoài trang chính: nếu đang chọn 1 kiểu mẫu và kiểu đó
+   đã khai báo activeFields (đã tick trong modal) thì chỉ lấy đúng những ô đó; nếu kiểu mẫu chưa
+   từng khai báo (dữ liệu cũ) hoặc chưa chọn kiểu nào thì lấy toàn bộ ô của danh mục như trước giờ. */
+function ktActiveFields(){
+  const catFields = ktGetFields(ktActiveCategory);
+  const sel = ktFindStyleById(ktSelectedId);
+  if(!sel) return catFields;
+  const keys = Array.isArray(sel.activeFields) && sel.activeFields.length ? sel.activeFields : null;
+  if(!keys) return catFields;
+  const filtered = catFields.filter(f=>keys.includes(f.key));
+  return filtered.length ? filtered : catFields;
+}
 function ktMatchedNotes(style, vars){
   const rules = Array.isArray(style.noteRules) ? style.noteRules : [];
   return rules.filter(r=>{
@@ -622,23 +651,29 @@ function ktMatchedNotes(style, vars){
 }
 
 /* ---------- KHỔ TRẢI: ô nhập kích thước động theo từng danh mục ---------- */
-function renderKtInputs(){
+function renderKtInputs(preserveState){
   const el = document.getElementById('ktInputsRow');
-  const fields = ktGetFields(ktActiveCategory);
+  const fields = ktActiveFields();
+  const prevVals = {};
+  if(preserveState){
+    el.querySelectorAll('[data-kt-input]').forEach(inp=>{ prevVals[inp.dataset.ktInput] = inp.value; });
+  }
   el.innerHTML = fields.map((f,i)=>`
     <div class="field">
       <label>${i+1}. ${f.label}</label>
-      <input type="number" id="kt-input-${f.key}" data-kt-input="${f.key}" placeholder="0">
+      <input type="number" id="kt-input-${f.key}" data-kt-input="${f.key}" placeholder="0" value="${preserveState && prevVals[f.key] ? prevVals[f.key].replace(/"/g,'&quot;') : ''}">
     </div>
   `).join('');
   el.querySelectorAll('[data-kt-input]').forEach(inp=>{
     inp.addEventListener('input', ktCompute);
   });
-  ktOnePieceOn = false;
-  const toggleWrap = document.getElementById('ktOnePieceToggle');
-  toggleWrap.classList.remove('active');
-  toggleWrap.style.display = (ktActiveCategory === 'tui-giay') ? 'flex' : 'none';
-  document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(b=>b.classList.toggle('active', b.dataset.val==='0'));
+  if(!preserveState){
+    ktOnePieceOn = false;
+    const toggleWrap = document.getElementById('ktOnePieceToggle');
+    toggleWrap.classList.remove('active');
+    toggleWrap.style.display = (ktActiveCategory === 'tui-giay') ? 'flex' : 'none';
+    document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(b=>b.classList.toggle('active', b.dataset.val==='0'));
+  }
 }
 document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -658,7 +693,7 @@ document.getElementById('ktCopyResultBtn').addEventListener('click', async ()=>{
   }
 });
 function ktReadInputs(){
-  const fields = ktGetFields(ktActiveCategory);
+  const fields = ktActiveFields();
   const vars = {};
   fields.forEach(f=>{
     vars[f.key] = parseFloat(document.getElementById('kt-input-'+f.key).value);
@@ -745,6 +780,7 @@ function renderKtStyleList(){
       if(e.target.closest('[data-edit]')) return;
       ktSelectedId = row.dataset.id;
       renderKtStyleList();
+      renderKtInputs(true);
       renderKtImagePanel();
       ktCompute();
     });
@@ -788,7 +824,7 @@ function ktCompute(){
   const body = document.getElementById('ktResultBody');
   const headText = document.getElementById('ktResultHeadText');
   const sel = ktFindStyleById(ktSelectedId);
-  const fields = ktGetFields(ktActiveCategory);
+  const fields = ktActiveFields();
   const vars = ktReadInputs();
   const onePiece = ktOnePieceOn && ktActiveCategory === 'tui-giay';
   headText.textContent = onePiece ? 'Khổ trải · Túi nối' : 'Khổ trải';
@@ -842,11 +878,39 @@ const ktMClearImg = document.getElementById('ktMClearImg');
 const ktMDeleteBtn = document.getElementById('ktMDeleteBtn');
 const ktSaveStatus = document.getElementById('ktSaveStatus');
 const ktMPartsList = document.getElementById('ktMPartsList');
+const ktMFieldsUseList = document.getElementById('ktMFieldsUseList');
 let ktMPartRows = []; // [{label, ngangFormula, caoFormula}] đang chỉnh trong modal
+let ktMActiveFieldKeys = new Set(); // các field (key) đang được tick "dùng cho kiểu này" trong modal
 
 function ktModalIsTuiGiay(){ return ktMCategory.value === 'tui-giay'; }
+/* Danh sách field mà kiểu mẫu đang sửa/tạo được phép dùng (theo các ô đã tick) — dùng để build
+   gợi ý biến số, placeholder công thức, và validate công thức khi lưu. */
+function ktModalActiveFieldDefs(){
+  const catFields = ktGetFields(ktMCategory.value);
+  const filtered = catFields.filter(f=>ktMActiveFieldKeys.has(f.key));
+  return filtered.length ? filtered : catFields;
+}
+function ktRenderFieldsUseList(){
+  const catFields = ktGetFields(ktMCategory.value);
+  ktMFieldsUseList.innerHTML = catFields.map(f=>`
+    <label class="kt-fieldsuse-item${ktMActiveFieldKeys.has(f.key)?' checked':''}">
+      <input type="checkbox" data-fu-checkbox="${f.key}" ${ktMActiveFieldKeys.has(f.key)?'checked':''}>
+      ${f.label}
+    </label>
+  `).join('');
+  ktMFieldsUseList.querySelectorAll('[data-fu-checkbox]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const key = cb.dataset.fuCheckbox;
+      if(cb.checked) ktMActiveFieldKeys.add(key); else ktMActiveFieldKeys.delete(key);
+      cb.closest('.kt-fieldsuse-item').classList.toggle('checked', cb.checked);
+      updateKtModalHint();
+      ktRenderPartRows();
+      ktRenderNoteRuleRows();
+    });
+  });
+}
 function updateKtModalHint(){
-  const fields = ktGetFields(ktMCategory.value);
+  const fields = ktModalActiveFieldDefs();
   const varList = fields.map(f=>`<code>${f.key}</code> (${f.label})`).join(', ');
   let hint = `Dùng biến ${varList}. Nếu sản phẩm có nhiều thành phần (VD: hộp âm dương gồm Đáy + Nắp), bấm "+ Thêm thành phần" để mỗi thành phần có công thức và kết quả riêng.`;
   if(ktModalIsTuiGiay()){
@@ -855,7 +919,7 @@ function updateKtModalHint(){
   document.getElementById('ktMFormulaHint').innerHTML = hint;
 }
 function ktRenderPartRows(){
-  const fields = ktGetFields(ktMCategory.value);
+  const fields = ktModalActiveFieldDefs();
   const ngangPh = 'VD: (' + fields.map(f=>f.key).join('*2)+(') + '*2)';
   const caoPh = 'VD: ' + fields.map(f=>f.key).join('+');
   const showOnePiece = ktModalIsTuiGiay();
@@ -924,7 +988,7 @@ document.getElementById('ktMAddPartBtn').addEventListener('click', ()=>{
 const ktMNoteRulesList = document.getElementById('ktMNoteRulesList');
 let ktMNoteRuleRows = []; // [{field, min, max, text}] đang chỉnh trong modal
 function ktRenderNoteRuleRows(){
-  const fields = ktGetFields(ktMCategory.value);
+  const fields = ktModalActiveFieldDefs();
   const fieldOptions = fields.map(f=>`<option value="${f.key}">${f.label}</option>`).join('');
   if(!ktMNoteRuleRows.length){
     ktMNoteRulesList.innerHTML = '';
@@ -976,7 +1040,7 @@ function ktRenderNoteRuleRows(){
   });
 }
 document.getElementById('ktMAddNoteRuleBtn').addEventListener('click', ()=>{
-  const fields = ktGetFields(ktMCategory.value);
+  const fields = ktModalActiveFieldDefs();
   ktMNoteRuleRows.push({ field: fields[0] ? fields[0].key : '', min:'', max:'', text:'' });
   ktRenderNoteRuleRows();
 });
@@ -996,7 +1060,7 @@ document.getElementById('ktMCopyNoteBtn').addEventListener('click', ()=>{
   if(!src){ showToast('Chưa chọn kiểu để sao chép'); return; }
   const srcRules = Array.isArray(src.noteRules) ? src.noteRules : [];
   if(!srcRules.length){ showToast(`Kiểu "${src.name}" chưa có ghi chú nào`); return; }
-  const fields = ktGetFields(ktMCategory.value);
+  const fields = ktModalActiveFieldDefs();
   srcRules.forEach(r=>{
     ktMNoteRuleRows.push({
       field: fields.some(f=>f.key===r.field) ? r.field : (fields[0] ? fields[0].key : ''),
@@ -1021,6 +1085,8 @@ function openKtModal(ctx){
     ktMPartRows = [{ label:'', ngangFormula:'', caoFormula:'', oneNgangFormula:'', oneCaoFormula:'' }];
     ktMNoteRuleRows = [];
     ktMDeleteBtn.style.display = 'none';
+    // Kiểu mới: mặc định tick hết ô của danh mục, người dùng bỏ tick ô nào không cần.
+    ktMActiveFieldKeys = new Set(ktGetFields(ktMCategory.value).map(f=>f.key));
   } else {
     const found = ktFindStyleById(ctx.id);
     document.getElementById('ktModalTitle').textContent = 'Sửa kiểu mẫu';
@@ -1032,7 +1098,16 @@ function openKtModal(ctx){
     ktMNoteRuleRows = (found.noteRules||[]).map(r=>({ field:r.field||'', min: r.min===null||r.min===undefined ? '' : r.min, max: r.max===null||r.max===undefined ? '' : r.max, text:r.text||'' }));
     ktModalCtx.hadImage = found.hasImage;
     ktMDeleteBtn.style.display = '';
+    // Kiểu đã có sẵn: dùng đúng các ô đã được tick lưu trước đó; nếu là dữ liệu cũ chưa từng khai báo
+    // (activeFields rỗng/null) thì mặc định tick hết ô hiện có của danh mục như hành vi cũ.
+    const catFieldsNow = ktGetFields(found.categoryId);
+    ktMActiveFieldKeys = new Set(
+      (Array.isArray(found.activeFields) && found.activeFields.length)
+        ? found.activeFields.filter(k=>catFieldsNow.some(f=>f.key===k))
+        : catFieldsNow.map(f=>f.key)
+    );
   }
+  ktRenderFieldsUseList();
   updateKtModalHint();
   ktRenderPartRows();
   ktRenderNoteRuleRows();
@@ -1075,7 +1150,11 @@ async function ktHandleImageFile(file){
 }
 document.getElementById('ktModalCloseBtn').addEventListener('click', closeKtModal);
 document.getElementById('ktMCancelBtn').addEventListener('click', closeKtModal);
-ktMCategory.addEventListener('change', ()=>{ updateKtModalHint(); ktRenderPartRows(); ktRenderNoteRuleRows(); });
+ktMCategory.addEventListener('change', ()=>{
+  ktMActiveFieldKeys = new Set(ktGetFields(ktMCategory.value).map(f=>f.key));
+  ktRenderFieldsUseList();
+  updateKtModalHint(); ktRenderPartRows(); ktRenderNoteRuleRows();
+});
 
 ktMImgFile.addEventListener('change', async (e)=>{
   const file = e.target.files[0];
@@ -1116,16 +1195,17 @@ ktMClearImg.addEventListener('click', ()=>{
 document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
   const name = ktMName.value.trim();
   if(!name){ ktSaveStatus.textContent = 'Nhập tên kiểu trước đã.'; return; }
+  if(ktMActiveFieldKeys.size===0){ ktSaveStatus.textContent = 'Chọn ít nhất 1 ô kích thước cho kiểu này.'; return; }
   const cleanParts = ktMPartRows.map(p=>({ label:(p.label||'').trim(), ngangFormula:(p.ngangFormula||'').trim(), caoFormula:(p.caoFormula||'').trim(), oneNgangFormula:(p.oneNgangFormula||'').trim(), oneCaoFormula:(p.oneCaoFormula||'').trim() }));
   if(cleanParts.length>1 && cleanParts.some(p=>!p.label)){ ktSaveStatus.textContent = 'Nhập tên cho từng thành phần (VD: Đáy, Nắp).'; return; }
-  const testFields = ktGetFields(ktMCategory.value);
+  const testFields = ktModalActiveFieldDefs();
   const testVars = {};
   testFields.forEach((f,i)=>{ testVars[f.key] = 100 + i*50; });
   for(const p of cleanParts){
-    if(p.ngangFormula && isNaN(ktEvalFormula(p.ngangFormula, testVars))){ ktSaveStatus.textContent = `Công thức Ngang trải${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ.`; return; }
-    if(p.caoFormula && isNaN(ktEvalFormula(p.caoFormula, testVars))){ ktSaveStatus.textContent = `Công thức Cao trải${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ.`; return; }
-    if(p.oneNgangFormula && isNaN(ktEvalFormula(p.oneNgangFormula, testVars))){ ktSaveStatus.textContent = `Công thức Ngang trải Túi nối${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ.`; return; }
-    if(p.oneCaoFormula && isNaN(ktEvalFormula(p.oneCaoFormula, testVars))){ ktSaveStatus.textContent = `Công thức Cao trải Túi nối${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ.`; return; }
+    if(p.ngangFormula && isNaN(ktEvalFormula(p.ngangFormula, testVars))){ ktSaveStatus.textContent = `Công thức Ngang trải${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ (chỉ dùng được các ô đã tick ở trên).`; return; }
+    if(p.caoFormula && isNaN(ktEvalFormula(p.caoFormula, testVars))){ ktSaveStatus.textContent = `Công thức Cao trải${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ (chỉ dùng được các ô đã tick ở trên).`; return; }
+    if(p.oneNgangFormula && isNaN(ktEvalFormula(p.oneNgangFormula, testVars))){ ktSaveStatus.textContent = `Công thức Ngang trải Túi nối${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ (chỉ dùng được các ô đã tick ở trên).`; return; }
+    if(p.oneCaoFormula && isNaN(ktEvalFormula(p.oneCaoFormula, testVars))){ ktSaveStatus.textContent = `Công thức Cao trải Túi nối${p.label ? ' của "'+p.label+'"' : ''} không hợp lệ (chỉ dùng được các ô đã tick ở trên).`; return; }
   }
   const cleanNoteRules = ktMNoteRuleRows
     .map(r=>({
@@ -1136,6 +1216,7 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
     }))
     .filter(r=>r.field && r.text);
   if(cleanNoteRules.some(r=>r.min!==null && r.max!==null && r.min > r.max)){ ktSaveStatus.textContent = 'Khoảng "Từ - Đến" của một ghi chú đang bị ngược, hãy kiểm tra lại.'; return; }
+  const cleanActiveFields = ktGetFields(ktMCategory.value).map(f=>f.key).filter(k=>ktMActiveFieldKeys.has(k));
 
   ktSaveStatus.textContent = 'Đang lưu…';
   const hasNewImage = !!ktModalCtx.currentImage;
@@ -1143,13 +1224,19 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
 
   try{
     let noteRulesUnsupported = false;
+    let activeFieldsUnsupported = false;
     if(ktModalCtx.mode==='new'){
       const id = 'custom-' + Date.now();
       const row = {
-        id, category_id: ktMCategory.value, name, parts: cleanParts, note_rules: cleanNoteRules,
+        id, category_id: ktMCategory.value, name, parts: cleanParts, note_rules: cleanNoteRules, active_fields: cleanActiveFields,
         has_image: hasNewImage, image_base64: hasNewImage ? ktModalCtx.currentImage : null,
       };
       let {error} = await sbClient.from('khotrai_styles').insert(row);
+      if(error && /active_fields/i.test(error.message||'')){
+        activeFieldsUnsupported = true;
+        delete row.active_fields;
+        ({error} = await sbClient.from('khotrai_styles').insert(row));
+      }
       if(error && /note_rules/i.test(error.message||'')){
         noteRulesUnsupported = true;
         delete row.note_rules;
@@ -1160,12 +1247,17 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
       ktActiveCategory = row.category_id;
     } else {
       const update = {
-        name, parts: cleanParts, note_rules: cleanNoteRules,
+        name, parts: cleanParts, note_rules: cleanNoteRules, active_fields: cleanActiveFields,
         has_image: willHaveImage,
       };
       if(hasNewImage) update.image_base64 = ktModalCtx.currentImage;
       else if(ktModalCtx.removeImage) update.image_base64 = null;
       let {error} = await sbClient.from('khotrai_styles').update(update).eq('id', ktModalCtx.id);
+      if(error && /active_fields/i.test(error.message||'')){
+        activeFieldsUnsupported = true;
+        delete update.active_fields;
+        ({error} = await sbClient.from('khotrai_styles').update(update).eq('id', ktModalCtx.id));
+      }
       if(error && /note_rules/i.test(error.message||'')){
         noteRulesUnsupported = true;
         delete update.note_rules;
@@ -1175,16 +1267,18 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
       delete ktImageCache[ktModalCtx.id];
     }
     await loadAll();
-    ktSaveStatus.textContent = noteRulesUnsupported
-      ? 'Đã lưu (chưa lưu được ghi chú — cần tạo cột note_rules trên Supabase).'
+    const missingCols = [noteRulesUnsupported && 'note_rules', activeFieldsUnsupported && 'active_fields'].filter(Boolean);
+    ktSaveStatus.textContent = missingCols.length
+      ? `Đã lưu (thiếu cột trên Supabase: ${missingCols.join(', ')} — xem ghi chú SQL cần chạy thêm).`
       : 'Đã lưu.';
     renderKtCatAccordion();
     renderKtImagePanel();
+    renderKtInputs();
     ktCompute();
-    setTimeout(closeKtModal, noteRulesUnsupported ? 1800 : 250);
+    setTimeout(closeKtModal, missingCols.length ? 2200 : 250);
   }catch(e){
     console.error('save khotrai style:', e);
-    ktSaveStatus.textContent = 'Lỗi khi lưu. (Cột note_rules đã được tạo trên bảng khotrai_styles chưa?)';
+    ktSaveStatus.textContent = 'Lỗi khi lưu. (Cột note_rules / active_fields đã được tạo trên bảng khotrai_styles chưa?)';
   }
 });
 
@@ -1199,6 +1293,7 @@ ktMDeleteBtn.addEventListener('click', async ()=>{
     closeKtModal();
     renderKtCatAccordion();
     renderKtImagePanel();
+    renderKtInputs();
     ktCompute();
   }catch(e){
     console.error('delete khotrai style:', e);
@@ -1291,7 +1386,20 @@ document.getElementById('ktCatMSaveBtn').addEventListener('click', async ()=>{
   const keySet = new Set(cleanRows.map(f=>f.key));
   if(keySet.size !== cleanRows.length){ ktCatSaveStatus.textContent = 'Các Biến phải khác nhau.'; return; }
 
+  // Nếu danh mục có thêm field mới (so với trước khi sửa), "khóa" các kiểu mẫu hiện có trong danh mục
+  // này mà chưa từng tự khai báo activeFields (dữ liệu cũ) vào đúng tập field CŨ, để field mới không
+  // tự động hiện thêm ở các kiểu đó — người dùng phải chủ động vào sửa từng kiểu để bật field mới lên.
+  const isNewCategory = (ktCatModalCtx.mode==='new' && !isBuiltin);
+  let oldKeysForBackfill = null;
+  if(!isNewCategory){
+    const oldFields = ktGetCategory(ktCatModalCtx.id).fields || [];
+    const oldKeys = oldFields.map(f=>f.key);
+    const newKeys = cleanRows.map(f=>f.key);
+    if(newKeys.some(k=>!oldKeys.includes(k))) oldKeysForBackfill = oldKeys;
+  }
+
   ktCatSaveStatus.textContent = 'Đang lưu…';
+  let backfillFailed = false;
   try{
     if(isBuiltin){
       const {error} = await sbClient.from('khotrai_categories').upsert({ id: ktCatModalCtx.id, name, fields: cleanRows }, { onConflict: 'id' });
@@ -1305,14 +1413,30 @@ document.getElementById('ktCatMSaveBtn').addEventListener('click', async ()=>{
       const {error} = await sbClient.from('khotrai_categories').update({ name, fields: cleanRows }).eq('id', ktCatModalCtx.id);
       if(error) throw error;
     }
+    if(oldKeysForBackfill){
+      const affectedStyles = ktGetCategoryStyles(ktCatModalCtx.id).filter(s=>!Array.isArray(s.activeFields) || !s.activeFields.length);
+      if(affectedStyles.length){
+        try{
+          const results = await Promise.all(affectedStyles.map(s=>
+            sbClient.from('khotrai_styles').update({ active_fields: oldKeysForBackfill }).eq('id', s.id)
+          ));
+          if(results.some(r=>r.error)) backfillFailed = true;
+        }catch(e){
+          console.warn('backfill active_fields:', e);
+          backfillFailed = true;
+        }
+      }
+    }
     await loadAll();
     ktSelectedId = null;
-    ktCatSaveStatus.textContent = 'Đã lưu.';
+    ktCatSaveStatus.textContent = backfillFailed
+      ? 'Đã lưu (không tự khóa được ô kích thước cũ cho các kiểu hiện có — cần tạo cột active_fields trên bảng khotrai_styles).'
+      : 'Đã lưu.';
     renderKtCatAccordion();
     renderKtImagePanel();
     renderKtInputs();
     ktCompute();
-    setTimeout(closeKtCatModal, 250);
+    setTimeout(closeKtCatModal, backfillFailed ? 2200 : 250);
   }catch(e){
     console.error('save khotrai category:', e);
     ktCatSaveStatus.textContent = 'Lỗi khi lưu. (Bảng khotrai_categories đã được tạo trên Supabase chưa?)';
