@@ -133,6 +133,12 @@
   .kt-icon-btn:hover{ background:var(--surface-alt); color:var(--ink); }
   .kt-style-row.selected .kt-icon-btn{ color:rgba(255,255,255,.75); }
   .kt-style-row.selected .kt-icon-btn:hover{ background:rgba(255,255,255,.15); color:var(--white); }
+  .kt-drag-handle{ cursor:grab; touch-action:none; color:var(--ink-faint); font-size:14px; line-height:1; padding:4px 2px; flex-shrink:0; user-select:none; }
+  .kt-drag-handle:active{ cursor:grabbing; }
+  .kt-cat-group.active .kt-drag-handle{ color:rgba(255,255,255,.6); }
+  .kt-style-row.selected .kt-drag-handle{ color:rgba(255,255,255,.55); }
+  [data-drag-item].kt-dragging{ opacity:.45; }
+  [data-drag-item]{ touch-action:pan-y; }
   .kt-add-btn{ width:100%; padding:11px 12px; border:1.5px dashed var(--line-strong); border-radius:var(--radius); background:var(--surface-alt); color:var(--ink-soft); font-family:'Inter', sans-serif; font-size:13px; font-weight:600; cursor:pointer; transition:border-color .15s, color .15s; }
   .kt-add-btn:hover{ border-color:var(--red); color:var(--red-dark); }
   .kt-image-panel{ min-height:260px; display:flex; align-items:center; justify-content:center; padding:14px; }
@@ -245,7 +251,7 @@
       <div class="kt-layout">
         <div class="card kt-col-left">
           <h2>Kiểu Mẫu</h2>
-          <div id="ktCatAccordion"></div>
+          <div id="ktCatAccordion" data-drag-list="categories"></div>
           <button class="kt-add-btn" id="ktAddCategoryBtn" style="display:none; margin-top:4px;">+ Danh mục</button>
         </div>
 
@@ -435,12 +441,24 @@ const KT_CATEGORIES = [
 ];
 const KT_BUILTIN_IDS = new Set(KT_CATEGORIES.map(c=>c.id));
 let ktCustomCategories = []; // danh mục do người dùng tạo thêm, lấy từ Supabase
+let ktCategoryOrderOverride = {}; // id -> vị trí, ghi đè tạm trong phiên làm việc sau khi kéo thả (để không bị giật lại trong lúc chờ lưu lên Supabase)
+function ktEffectiveCategorySortOrder(cat){
+  if(Object.prototype.hasOwnProperty.call(ktCategoryOrderOverride, cat.id)) return ktCategoryOrderOverride[cat.id];
+  return (cat.sortOrder===null || cat.sortOrder===undefined) ? Infinity : cat.sortOrder;
+}
+function ktSortCategoriesForDisplay(list){
+  // Array.prototype.sort ổn định (stable) từ ES2019 -> các mục cùng thứ tự (chưa từng kéo thả) giữ nguyên
+  // thứ tự mặc định ban đầu (danh mục có sẵn trước, danh mục tự tạo sau).
+  return [...list].sort((a,b)=> ktEffectiveCategorySortOrder(a) - ktEffectiveCategorySortOrder(b));
+}
 function ktAllCategories(){
   const overrides = {};
   ktCustomCategories.forEach(c=>{ if(KT_BUILTIN_IDS.has(c.id)) overrides[c.id] = c; });
-  const builtins = KT_CATEGORIES.map(c => overrides[c.id] ? { ...c, name: overrides[c.id].name || c.name, fields: (Array.isArray(overrides[c.id].fields) && overrides[c.id].fields.length) ? overrides[c.id].fields : c.fields } : c);
+  const builtins = KT_CATEGORIES.map(c => overrides[c.id]
+    ? { ...c, name: overrides[c.id].name || c.name, fields: (Array.isArray(overrides[c.id].fields) && overrides[c.id].fields.length) ? overrides[c.id].fields : c.fields, sortOrder: overrides[c.id].sortOrder }
+    : { ...c, sortOrder: null });
   const trueCustom = ktCustomCategories.filter(c=>!KT_BUILTIN_IDS.has(c.id));
-  return [...builtins, ...trueCustom];
+  return ktSortCategoriesForDisplay([...builtins, ...trueCustom]);
 }
 function ktGetCategory(catId){
   if(catId==null) return null;
@@ -500,7 +518,12 @@ function showToast(msg){
 /* ---------- STORAGE (Supabase) ---------- */
 async function loadAll(){
   try{
-    let res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules,active_fields');
+    let res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules,active_fields,sort_order');
+    if(res.error && /sort_order/i.test(res.error.message||'')){
+      // Cột sort_order chưa được tạo trên Supabase -> tải lại không kèm cột này (kiểu mẫu giữ thứ tự mặc định, không kéo thả lưu được).
+      console.warn('Cột sort_order chưa tồn tại trên khotrai_styles, tạm bỏ qua (không lưu được thứ tự kéo thả).');
+      res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules,active_fields');
+    }
     if(res.error && /active_fields/i.test(res.error.message||'')){
       // Cột active_fields chưa được tạo trên Supabase -> tải lại không kèm cột này (mọi kiểu mẫu sẽ tạm dùng toàn bộ ô của danh mục).
       console.warn('Cột active_fields chưa tồn tại trên Supabase, tạm bỏ qua (mọi kiểu mẫu dùng toàn bộ ô kích thước của danh mục).');
@@ -528,13 +551,19 @@ async function loadAll(){
         text: n.text || '',
       })) : [];
       const activeFields = Array.isArray(r.active_fields) && r.active_fields.length ? r.active_fields : null;
-      return { id:r.id, categoryId:r.category_id, name:r.name, hasImage: !!r.has_image, parts, noteRules, activeFields };
+      const sortOrder = (r.sort_order===null || r.sort_order===undefined) ? null : Number(r.sort_order);
+      return { id:r.id, categoryId:r.category_id, name:r.name, hasImage: !!r.has_image, parts, noteRules, activeFields, sortOrder };
     });
   }catch(e){ ktStyles = []; console.error('loadAll khotrai_styles:', e); showToast('Lỗi tải danh mục khổ trải'); }
   try{
-    const {data, error} = await sbClient.from('khotrai_categories').select('id,name,fields');
+    let res = await sbClient.from('khotrai_categories').select('id,name,fields,sort_order');
+    if(res.error && /sort_order/i.test(res.error.message||'')){
+      console.warn('Cột sort_order chưa tồn tại trên khotrai_categories, tạm bỏ qua (không lưu được thứ tự kéo thả).');
+      res = await sbClient.from('khotrai_categories').select('id,name,fields');
+    }
+    const {data, error} = res;
     if(error) throw error;
-    ktCustomCategories = (data||[]).map(r=>({ id:r.id, name:r.name, fields: Array.isArray(r.fields) ? r.fields : [] }));
+    ktCustomCategories = (data||[]).map(r=>({ id:r.id, name:r.name, fields: Array.isArray(r.fields) ? r.fields : [], sortOrder: (r.sort_order===null||r.sort_order===undefined) ? null : Number(r.sort_order) }));
   }catch(e){ ktCustomCategories = []; console.error('loadAll khotrai_categories:', e); }
 }
 async function getKtStyleImage(styleId){
@@ -604,8 +633,15 @@ logoHomeEl.addEventListener('click', goHome);
 logoHomeEl.addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); goHome(); } });
 
 /* ---------- KHỔ TRẢI ---------- */
+let ktStyleOrderOverride = {}; // id -> vị trí, ghi đè tạm trong phiên làm việc sau khi kéo thả (để không bị giật lại trong lúc chờ lưu lên Supabase)
+function ktEffectiveStyleSortOrder(style){
+  if(Object.prototype.hasOwnProperty.call(ktStyleOrderOverride, style.id)) return ktStyleOrderOverride[style.id];
+  return (style.sortOrder===null || style.sortOrder===undefined) ? Infinity : style.sortOrder;
+}
 function ktGetCategoryStyles(catId){
-  return ktStyles.filter(s=>s.categoryId===catId);
+  // Array.prototype.sort ổn định (stable) từ ES2019 -> các kiểu chưa từng kéo thả (đều Infinity) giữ nguyên thứ tự tải về.
+  return ktStyles.filter(s=>s.categoryId===catId)
+    .sort((a,b)=> ktEffectiveStyleSortOrder(a) - ktEffectiveStyleSortOrder(b));
 }
 function ktFindStyleById(id){
   return ktStyles.find(s=>s.id===id) || null;
@@ -710,16 +746,18 @@ function renderKtCatAccordion(){
     const isCustom = !KT_BUILTIN_IDS.has(cat.id);
     const isActive = cat.id === ktActiveCategory;
     const editBtn = isEditor ? `<button type="button" class="kt-icon-btn" data-cat-edit="${cat.id}" title="${isCustom ? 'Sửa danh mục' : 'Sửa tên danh mục'}">✎</button>` : '';
+    const dragHandle = isEditor ? `<span class="kt-drag-handle" data-drag-handle title="Kéo để đổi thứ tự">⠿</span>` : '';
     const panel = isActive ? `
       <div class="kt-cat-panel">
         <input type="text" class="kt-style-search" id="ktStyleSearch" placeholder="Tìm kiểu mẫu..." value="${ktStyleSearchQuery.replace(/"/g,'&quot;')}">
-        <div id="ktStyleList"></div>
+        <div id="ktStyleList" data-drag-list="styles"></div>
         <button class="kt-add-btn" id="ktAddStyleBtn" style="display:${isEditor ? 'block' : 'none'};">+ Thêm kiểu mới</button>
       </div>
     ` : '';
     return `
-      <div class="kt-cat-group${isActive ? ' active' : ''}">
+      <div class="kt-cat-group${isActive ? ' active' : ''}" data-drag-item data-drag-id="${cat.id}">
         <div class="kt-cat-row" data-cat="${cat.id}">
+          ${dragHandle}
           <span class="kt-cat-arrow">${isActive ? '▾' : '▸'}</span>
           <span class="kt-cat-row-name">${cat.name}</span>
           ${editBtn}
@@ -730,7 +768,7 @@ function renderKtCatAccordion(){
   }).join('');
   el.querySelectorAll('.kt-cat-row').forEach(row=>{
     row.addEventListener('click', (e)=>{
-      if(e.target.closest('[data-cat-edit]')) return;
+      if(e.target.closest('[data-cat-edit]') || e.target.closest('[data-drag-handle]')) return;
       const catId = row.dataset.cat;
       ktActiveCategory = (ktActiveCategory === catId) ? null : catId; // bấm lại để thu gọn
       ktSelectedId = null;
@@ -761,14 +799,19 @@ function renderKtStyleList(){
   let styles = ktGetCategoryStyles(ktActiveCategory);
   const q = ktStyleSearchQuery.trim().toLowerCase();
   if(q) styles = styles.filter(s=>s.name.toLowerCase().includes(q));
+  el.dataset.dragCat = ktActiveCategory || '';
   if(styles.length===0){
     el.innerHTML = `<div class="empty">${q ? 'Không tìm thấy kiểu mẫu phù hợp.' : 'Chưa có kiểu mẫu nào trong danh mục này.'}</div>`;
     return;
   }
   const isEditor = currentRole === 'editor';
+  const canDrag = isEditor && !q; // ẩn kéo thả khi đang lọc theo từ khóa, tránh sắp lệch các kiểu bị ẩn
   el.innerHTML = styles.map(s=>`
-    <div class="kt-style-row${s.id===ktSelectedId?' selected':''}" data-id="${s.id}">
-      <span class="kt-style-name">${s.name}</span>
+    <div class="kt-style-row${s.id===ktSelectedId?' selected':''}" data-id="${s.id}" data-drag-item data-drag-id="${s.id}">
+      <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+        ${canDrag ? `<span class="kt-drag-handle" data-drag-handle title="Kéo để đổi thứ tự">⠿</span>` : ''}
+        <span class="kt-style-name">${s.name}</span>
+      </div>
       <div style="display:flex; align-items:center; gap:8px;">
         ${ktIsReady(s) ? '' : '<span class="kt-style-badge">chưa có công thức</span>'}
         ${isEditor ? `<div class="kt-style-actions"><button class="kt-icon-btn" data-edit="${s.id}" title="Sửa">✎</button></div>` : ''}
@@ -777,7 +820,7 @@ function renderKtStyleList(){
   `).join('');
   el.querySelectorAll('.kt-style-row').forEach(row=>{
     row.addEventListener('click', (e)=>{
-      if(e.target.closest('[data-edit]')) return;
+      if(e.target.closest('[data-edit]') || e.target.closest('[data-drag-handle]')) return;
       ktSelectedId = row.dataset.id;
       renderKtStyleList();
       renderKtInputs(true);
@@ -792,6 +835,100 @@ function renderKtStyleList(){
     });
   });
 }
+/* ---------- KHỔ TRẢI: kéo thả sắp xếp thứ tự (chỉ Editor) ----------
+   Dùng 1 listener pointerdown gắn trên document (event delegation) nên không cần gắn lại
+   sau mỗi lần render lại danh sách. Kéo qua tay cầm (⠿) mới bắt đầu kéo; bấm vào chỗ khác
+   trong dòng vẫn hoạt động như cũ (chọn danh mục / chọn kiểu mẫu). */
+document.addEventListener('pointerdown', (e)=>{
+  if(currentRole !== 'editor') return;
+  const handle = e.target.closest('[data-drag-handle]');
+  if(!handle) return;
+  const item = handle.closest('[data-drag-item]');
+  const list = handle.closest('[data-drag-list]');
+  if(!item || !list || item.parentElement !== list) return;
+  e.preventDefault();
+  const pointerId = e.pointerId;
+  try{ item.setPointerCapture(pointerId); }catch(err){}
+  item.classList.add('kt-dragging');
+
+  function onMove(ev){
+    const y = ev.clientY;
+    const siblings = Array.from(list.children).filter(el=>el!==item && el.matches('[data-drag-item]'));
+    for(const sib of siblings){
+      const r = sib.getBoundingClientRect();
+      const mid = r.top + r.height/2;
+      const itemIsAfterSib = !!(sib.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if(y < mid && itemIsAfterSib){ list.insertBefore(item, sib); break; }
+      if(y > mid && !itemIsAfterSib){ list.insertBefore(item, sib.nextSibling); break; }
+    }
+  }
+  function onUp(){
+    try{ item.releasePointerCapture(pointerId); }catch(err){}
+    item.classList.remove('kt-dragging');
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    const orderedIds = Array.from(list.children).filter(el=>el.matches('[data-drag-item]')).map(el=>el.dataset.dragId);
+    const listType = list.dataset.dragList;
+    if(listType === 'categories') ktPersistCategoryOrder(orderedIds);
+    else if(listType === 'styles') ktPersistStyleOrder(list.dataset.dragCat, orderedIds);
+  }
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+});
+
+async function ktPersistCategoryOrder(orderedIds){
+  // Ghi đè tạm ngay lập tức để danh sách không bị "giật" về thứ tự cũ trong lúc chờ Supabase phản hồi.
+  orderedIds.forEach((id,i)=>{ ktCategoryOrderOverride[id] = i; });
+  const all = ktAllCategories();
+  let unsupported = false;
+  try{
+    const results = await Promise.all(orderedIds.map((id,i)=>{
+      const cat = all.find(c=>c.id===id);
+      if(KT_BUILTIN_IDS.has(id)){
+        // Danh mục có sẵn: upsert đủ name+fields (giữ nguyên) kèm sort_order, phòng khi danh mục này
+        // chưa từng có dòng riêng trong bảng khotrai_categories.
+        return sbClient.from('khotrai_categories').upsert({ id, name: cat.name, fields: cat.fields, sort_order:i }, { onConflict:'id' });
+      }
+      return sbClient.from('khotrai_categories').update({ sort_order:i }).eq('id', id);
+    }));
+    if(results.some(r=>r.error && /sort_order/i.test(r.error.message||''))){
+      unsupported = true;
+    } else if(results.some(r=>r.error)){
+      throw results.find(r=>r.error).error;
+    }
+  }catch(e){
+    console.error('persist category order:', e);
+    showToast('Lỗi khi lưu thứ tự danh mục.');
+  }
+  if(unsupported) showToast('Chưa lưu được thứ tự — cần tạo cột sort_order trên bảng khotrai_categories.');
+  await loadAll();
+  renderKtCatAccordion();
+  renderKtImagePanel();
+  renderKtInputs();
+  ktCompute();
+}
+
+async function ktPersistStyleOrder(catId, orderedIds){
+  orderedIds.forEach((id,i)=>{ ktStyleOrderOverride[id] = i; });
+  let unsupported = false;
+  try{
+    const results = await Promise.all(orderedIds.map((id,i)=>
+      sbClient.from('khotrai_styles').update({ sort_order:i }).eq('id', id)
+    ));
+    if(results.some(r=>r.error && /sort_order/i.test(r.error.message||''))){
+      unsupported = true;
+    } else if(results.some(r=>r.error)){
+      throw results.find(r=>r.error).error;
+    }
+  }catch(e){
+    console.error('persist style order:', e);
+    showToast('Lỗi khi lưu thứ tự kiểu mẫu.');
+  }
+  if(unsupported) showToast('Chưa lưu được thứ tự — cần tạo cột sort_order trên bảng khotrai_styles.');
+  await loadAll();
+  renderKtStyleList();
+}
+
 async function renderKtImagePanel(){
   const sel = ktFindStyleById(ktSelectedId);
   const imgEl = document.getElementById('ktImageFull');
