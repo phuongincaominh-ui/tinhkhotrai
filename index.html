@@ -107,6 +107,13 @@
   .kt-cat-group.active .kt-cat-row .kt-icon-btn{ color:rgba(255,255,255,.75); }
   .kt-cat-group.active .kt-cat-row .kt-icon-btn:hover{ background:rgba(255,255,255,.15); color:var(--white); }
   .kt-cat-panel{ padding:12px 14px 14px; border-top:1px solid var(--line); background:var(--surface-alt); }
+  .kt-input-note{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin:-2px 0 12px; padding:7px 10px; font-size:12px; font-weight:600; color:var(--red-dark); background:var(--red-tint); border:1px solid var(--red); border-radius:6px; }
+  .kt-input-note-text{ flex:1; white-space:pre-wrap; line-height:1.5; }
+  .kt-input-note-edit{ flex:0 0 auto; background:none; border:none; color:var(--red); cursor:pointer; font-size:13px; padding:0 2px; line-height:1.5; }
+  .kt-input-note-edit:hover{ color:var(--red-dark); }
+  .kt-input-note-edit-row{ flex-direction:column; align-items:stretch; }
+  .kt-input-note-edit-row textarea{ width:100%; font-family:'Inter', sans-serif; font-size:12.5px; padding:8px 10px; border:1px solid var(--red); border-radius:6px; background:var(--white); color:var(--ink); resize:vertical; }
+  .kt-input-note-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:8px; }
   .kt-catfield-row{ display:flex; align-items:flex-end; gap:8px; }
   .kt-catfield-row .field{ flex:1; min-width:0; }
   .kt-catfield-row .field.kt-catfield-key{ max-width:92px; flex:0 0 92px; }
@@ -266,6 +273,17 @@
         <div class="kt-col-right">
           <div class="card">
             <h2>NHẬP KÍCH THƯỚC SẢN PHẨM (đơn vị tính mm)</h2>
+            <div class="kt-input-note" id="ktInputNoteBox" style="display:none;">
+              <span class="kt-input-note-text" id="ktInputNoteText"></span>
+              <button type="button" class="kt-input-note-edit" id="ktInputNoteEditBtn" title="Sửa ghi chú" style="display:none;">✎</button>
+            </div>
+            <div class="kt-input-note kt-input-note-edit-row" id="ktInputNoteEditRow" style="display:none;">
+              <textarea id="ktInputNoteTextarea" rows="2" placeholder="Nhập nội dung ghi chú..."></textarea>
+              <div class="kt-input-note-actions">
+                <button type="button" class="btn-ghost btn-small" id="ktInputNoteCancelBtn">Hủy</button>
+                <button type="button" class="btn-stamp btn-small" id="ktInputNoteSaveBtn">Lưu</button>
+              </div>
+            </div>
             <div class="row" id="ktInputsRow"></div>
             <div class="kt-onepiece-toggle" id="ktOnePieceToggle">
               <div class="kt-switch" id="ktOnePieceSwitch">
@@ -518,7 +536,12 @@ function showToast(msg){
 /* ---------- STORAGE (Supabase) ---------- */
 async function loadAll(){
   try{
-    let res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules,active_fields,sort_order');
+    let res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules,active_fields,sort_order,size_note');
+    if(res.error && /size_note/i.test(res.error.message||'')){
+      // Cột size_note chưa được tạo trên Supabase -> tải lại không kèm cột này (ghi chú riêng theo kiểu mẫu sẽ tạm không dùng được).
+      console.warn('Cột size_note chưa tồn tại trên khotrai_styles, tạm bỏ qua (chưa lưu được ghi chú riêng theo kiểu mẫu).');
+      res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules,active_fields,sort_order');
+    }
     if(res.error && /sort_order/i.test(res.error.message||'')){
       // Cột sort_order chưa được tạo trên Supabase -> tải lại không kèm cột này (kiểu mẫu giữ thứ tự mặc định, không kéo thả lưu được).
       console.warn('Cột sort_order chưa tồn tại trên khotrai_styles, tạm bỏ qua (không lưu được thứ tự kéo thả).');
@@ -552,7 +575,7 @@ async function loadAll(){
       })) : [];
       const activeFields = Array.isArray(r.active_fields) && r.active_fields.length ? r.active_fields : null;
       const sortOrder = (r.sort_order===null || r.sort_order===undefined) ? null : Number(r.sort_order);
-      return { id:r.id, categoryId:r.category_id, name:r.name, hasImage: !!r.has_image, parts, noteRules, activeFields, sortOrder };
+      return { id:r.id, categoryId:r.category_id, name:r.name, hasImage: !!r.has_image, parts, noteRules, activeFields, sortOrder, sizeNote: r.size_note || '' };
     });
   }catch(e){ ktStyles = []; console.error('loadAll khotrai_styles:', e); showToast('Lỗi tải danh mục khổ trải'); }
   try{
@@ -626,6 +649,7 @@ function goHome(){
   renderKtCatAccordion();
   renderKtImagePanel();
   renderKtInputs();
+  renderKtInputNote();
   ktCompute();
 }
 const logoHomeEl = document.getElementById('logoHome');
@@ -711,6 +735,68 @@ function renderKtInputs(preserveState){
     document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(b=>b.classList.toggle('active', b.dataset.val==='0'));
   }
 }
+/* ---------- KHỔ TRẢI: ghi chú đỏ riêng theo từng kiểu mẫu (lưu Supabase, chỉ editor sửa) ---------- */
+function renderKtInputNote(){
+  const box = document.getElementById('ktInputNoteBox');
+  const textEl = document.getElementById('ktInputNoteText');
+  const editBtn = document.getElementById('ktInputNoteEditBtn');
+  document.getElementById('ktInputNoteEditRow').style.display = 'none';
+  const sel = ktFindStyleById(ktSelectedId);
+  const isEditor = currentRole === 'editor';
+  if(!sel){
+    box.style.display = 'none';
+    editBtn.style.display = 'none';
+    return;
+  }
+  const content = sel.sizeNote || '';
+  textEl.textContent = content;
+  box.style.display = (content || isEditor) ? 'flex' : 'none';
+  editBtn.style.display = isEditor ? 'inline-block' : 'none';
+}
+
+function openKtInputNoteEdit(){
+  if(currentRole !== 'editor') return;
+  const sel = ktFindStyleById(ktSelectedId);
+  if(!sel) return;
+  document.getElementById('ktInputNoteBox').style.display = 'none';
+  const row = document.getElementById('ktInputNoteEditRow');
+  row.style.display = 'flex';
+  const ta = document.getElementById('ktInputNoteTextarea');
+  ta.value = sel.sizeNote || '';
+  setTimeout(()=> ta.focus(), 30);
+}
+
+function closeKtInputNoteEdit(){
+  document.getElementById('ktInputNoteEditRow').style.display = 'none';
+  renderKtInputNote();
+}
+
+async function saveKtInputNote(){
+  if(currentRole !== 'editor') return;
+  const sel = ktFindStyleById(ktSelectedId);
+  if(!sel) return;
+  const ta = document.getElementById('ktInputNoteTextarea');
+  const content = ta.value.trim();
+  const btn = document.getElementById('ktInputNoteSaveBtn');
+  btn.disabled = true; btn.textContent = 'Đang lưu...';
+  try{
+    const {error} = await sbClient.from('khotrai_styles').update({ size_note: content }).eq('id', sel.id);
+    if(error) throw error;
+    sel.sizeNote = content;
+    showToast('Đã lưu ghi chú cho kiểu mẫu "' + sel.name + '"');
+    closeKtInputNoteEdit();
+  }catch(e){
+    console.error('save note error:', e);
+    showToast('Lưu ghi chú thất bại — kiểm tra cột size_note trên bảng khotrai_styles');
+    renderKtInputNote();
+  }
+  btn.disabled = false; btn.textContent = 'Lưu';
+}
+
+document.getElementById('ktInputNoteEditBtn').addEventListener('click', openKtInputNoteEdit);
+document.getElementById('ktInputNoteCancelBtn').addEventListener('click', closeKtInputNoteEdit);
+document.getElementById('ktInputNoteSaveBtn').addEventListener('click', saveKtInputNote);
+
 document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     ktOnePieceOn = btn.dataset.val === '1';
@@ -773,7 +859,7 @@ function renderKtCatAccordion(){
       ktActiveCategory = (ktActiveCategory === catId) ? null : catId; // bấm lại để thu gọn
       ktSelectedId = null;
       ktStyleSearchQuery = '';
-      renderKtCatAccordion(); renderKtImagePanel(); renderKtInputs(); ktCompute();
+      renderKtCatAccordion(); renderKtImagePanel(); renderKtInputs(); renderKtInputNote(); ktCompute();
     });
   });
   el.querySelectorAll('[data-cat-edit]').forEach(btn=>{
@@ -824,6 +910,7 @@ function renderKtStyleList(){
       ktSelectedId = row.dataset.id;
       renderKtStyleList();
       renderKtInputs(true);
+      renderKtInputNote();
       renderKtImagePanel();
       ktCompute();
     });
@@ -905,6 +992,7 @@ async function ktPersistCategoryOrder(orderedIds){
   renderKtCatAccordion();
   renderKtImagePanel();
   renderKtInputs();
+  renderKtInputNote();
   ktCompute();
 }
 
@@ -1411,6 +1499,7 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
     renderKtCatAccordion();
     renderKtImagePanel();
     renderKtInputs();
+    renderKtInputNote();
     ktCompute();
     setTimeout(closeKtModal, missingCols.length ? 2200 : 250);
   }catch(e){
@@ -1431,6 +1520,7 @@ ktMDeleteBtn.addEventListener('click', async ()=>{
     renderKtCatAccordion();
     renderKtImagePanel();
     renderKtInputs();
+    renderKtInputNote();
     ktCompute();
   }catch(e){
     console.error('delete khotrai style:', e);
@@ -1572,6 +1662,7 @@ document.getElementById('ktCatMSaveBtn').addEventListener('click', async ()=>{
     renderKtCatAccordion();
     renderKtImagePanel();
     renderKtInputs();
+    renderKtInputNote();
     ktCompute();
     setTimeout(closeKtCatModal, backfillFailed ? 2200 : 250);
   }catch(e){
@@ -1595,6 +1686,7 @@ ktCatMDeleteBtn.addEventListener('click', async ()=>{
     renderKtCatAccordion();
     renderKtImagePanel();
     renderKtInputs();
+    renderKtInputNote();
     ktCompute();
   }catch(e){
     console.error('delete khotrai category:', e);
@@ -1622,6 +1714,7 @@ function updateAuthHeader(){
 function refreshAfterRoleChange(){
   renderKtCatAccordion();
   renderKtImagePanel();
+  renderKtInputNote();
   ktCompute();
 }
 async function afterLogin(user){
@@ -1684,6 +1777,7 @@ async function init(){
   renderKtCatAccordion();
   renderKtImagePanel();
   renderKtInputs();
+  renderKtInputNote();
   ktCompute();
   document.getElementById('loading').style.display = 'none';
   document.getElementById('mainApp').style.display = 'block';
