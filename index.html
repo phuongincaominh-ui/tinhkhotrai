@@ -114,6 +114,11 @@
   .kt-input-note-text{ flex:1; white-space:pre-wrap; line-height:1.5; }
   .kt-input-note-edit{ flex:0 0 auto; background:none; border:none; color:var(--amber-dark); cursor:pointer; font-size:13px; padding:0 2px; line-height:1.5; }
   .kt-input-note-edit:hover{ color:var(--red-dark); }
+  .kt-lock-box{ display:flex; align-items:flex-start; gap:9px; margin:0 0 12px; padding:12px 13px; font-size:12.5px; font-weight:600; color:var(--red-dark); background:var(--red-tint); border-radius:var(--radius-sm); line-height:1.5; }
+  .kt-lock-icon{ font-size:15px; flex-shrink:0; }
+  .kt-lock-unverified-field{ display:flex; align-items:flex-start; gap:9px; padding:11px 13px; background:var(--amber-tint); border-radius:var(--radius-sm); cursor:pointer; user-select:none; }
+  .kt-lock-unverified-field input{ width:auto; margin:2px 0 0; accent-color:var(--amber-dark); flex-shrink:0; }
+  .kt-lock-unverified-field-text{ font-size:12.5px; font-weight:600; color:var(--amber-dark); line-height:1.5; }
   .kt-input-note-edit-row{ flex-direction:column; align-items:stretch; background:var(--surface-alt); }
   .kt-input-note-edit-row textarea{ width:100%; font-family:'Inter', sans-serif; font-size:12.5px; padding:9px 11px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--white); color:var(--ink); resize:vertical; }
   .kt-input-note-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:8px; }
@@ -138,6 +143,8 @@
   .kt-style-row.selected .kt-style-badge{ color:var(--red-dark); border-color:transparent; }
   .kt-style-name{ font-family:'Inter', sans-serif; font-weight:600; font-size:13px; color:var(--ink); }
   .kt-style-badge{ font-size:10.5px; font-family:'JetBrains Mono', monospace; color:var(--ink-faint); border:none; padding:2px 0; border-radius:100px; }
+  .kt-style-badge.kt-badge-lock{ font-family:'Inter', sans-serif; font-weight:700; color:var(--red-dark); background:var(--red-tint); padding:3px 8px; border-radius:100px; }
+  .kt-style-row.selected .kt-style-badge.kt-badge-lock{ background:var(--white); }
   .kt-style-actions{ display:flex; gap:4px; flex-shrink:0; }
   .kt-icon-btn{ width:30px; height:30px; border-radius:var(--radius-sm); border:none; background:transparent; color:var(--ink-soft); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:13px; }
   .kt-icon-btn:hover{ background:rgba(0,0,0,.06); color:var(--ink); }
@@ -281,6 +288,10 @@
                 <button type="button" class="btn-stamp btn-small" id="ktInputNoteSaveBtn">Lưu</button>
               </div>
             </div>
+            <div class="kt-lock-box" id="ktLockBox" style="display:none;">
+              <span class="kt-lock-icon">🔒</span>
+              <span id="ktLockBoxText"></span>
+            </div>
             <div class="row" id="ktInputsRow"></div>
             <div class="kt-onepiece-toggle" id="ktOnePieceToggle">
               <div class="kt-switch" id="ktOnePieceSwitch">
@@ -366,6 +377,12 @@
         <div class="kt-hint" id="ktMFormulaHint">Dùng biến <code>n</code> (Ngang), <code>h</code> (Hông), <code>c</code> (Cao).</div>
         <div class="kt-parts-list" id="ktMPartsList"></div>
         <button class="btn-ghost btn-small" id="ktMAddPartBtn" type="button" style="align-self:flex-start; margin-top:4px;">+ Thêm thành phần (VD: Đáy, Nắp)</button>
+      </div>
+      <div class="field">
+        <label class="kt-lock-unverified-field" for="ktMFormulaUnverified">
+          <input type="checkbox" id="ktMFormulaUnverified">
+          <span class="kt-lock-unverified-field-text">Công thức chưa chuẩn / đang thử — tạm khóa, không cho viewer nhập để tính khổ trải (viewer sẽ thấy cảnh báo 🔒 khi bấm vào kiểu này).</span>
+        </label>
       </div>
       <div class="field">
         <label>Ghi chú theo điều kiện (tùy chọn)</label>
@@ -538,7 +555,12 @@ function showToast(msg){
 /* ---------- STORAGE (Supabase) ---------- */
 async function loadAll(){
   try{
-    let res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules,active_fields,sort_order,size_note');
+    let res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules,active_fields,sort_order,size_note,formula_unverified');
+    if(res.error && /formula_unverified/i.test(res.error.message||'')){
+      // Cột formula_unverified chưa được tạo trên Supabase -> tải lại không kèm cột này (tạm không đánh dấu được công thức "chưa chuẩn").
+      console.warn('Cột formula_unverified chưa tồn tại trên khotrai_styles, tạm bỏ qua (không khóa được kiểu có công thức chưa chuẩn).');
+      res = await sbClient.from('khotrai_styles').select('id,category_id,name,ngang_formula,cao_formula,has_image,parts,note_rules,active_fields,sort_order,size_note');
+    }
     if(res.error && /size_note/i.test(res.error.message||'')){
       // Cột size_note chưa được tạo trên Supabase -> tải lại không kèm cột này (ghi chú riêng theo kiểu mẫu sẽ tạm không dùng được).
       console.warn('Cột size_note chưa tồn tại trên khotrai_styles, tạm bỏ qua (chưa lưu được ghi chú riêng theo kiểu mẫu).');
@@ -577,7 +599,7 @@ async function loadAll(){
       })) : [];
       const activeFields = Array.isArray(r.active_fields) && r.active_fields.length ? r.active_fields : null;
       const sortOrder = (r.sort_order===null || r.sort_order===undefined) ? null : Number(r.sort_order);
-      return { id:r.id, categoryId:r.category_id, name:r.name, hasImage: !!r.has_image, parts, noteRules, activeFields, sortOrder, sizeNote: r.size_note || '' };
+      return { id:r.id, categoryId:r.category_id, name:r.name, hasImage: !!r.has_image, parts, noteRules, activeFields, sortOrder, sizeNote: r.size_note || '', formulaUnverified: !!r.formula_unverified };
     });
   }catch(e){ ktStyles = []; console.error('loadAll khotrai_styles:', e); showToast('Lỗi tải danh mục khổ trải'); }
   try{
@@ -686,6 +708,17 @@ function ktIsReady(style){
 function ktIsOnePieceReady(style){
   return !!(style && Array.isArray(style.parts) && style.parts.length && style.parts.every(p=>p.oneNgangFormula && p.oneCaoFormula));
 }
+/* Một kiểu mẫu bị "khóa" (không cho viewer nhập để tính) khi công thức chưa có (đang làm dở)
+   hoặc khi editor tự đánh dấu công thức "chưa chuẩn" (đã có nhưng chưa kiểm tra kỹ). */
+function ktIsLocked(style){
+  return !!(style && (!ktIsReady(style) || style.formulaUnverified));
+}
+function ktLockMessage(style){
+  if(!style) return '';
+  if(!ktIsReady(style)) return `Kiểu "${style.name}" chưa có công thức tính đầy đủ, chưa thể tính khổ trải.${currentRole==='editor' ? ' Bấm ✎ để nhập công thức.' : ' Vui lòng liên hệ quản trị để hoàn thiện công thức.'}`;
+  if(style.formulaUnverified) return `Kiểu "${style.name}" có công thức nhưng chưa được kiểm tra/chuẩn hóa, tạm khóa để tránh tính sai.${currentRole==='editor' ? ' Bấm ✎ để bỏ đánh dấu "chưa chuẩn" khi đã kiểm tra xong.' : ' Vui lòng liên hệ quản trị.'}`;
+  return '';
+}
 function ktEvalFormula(expr, vars){
   try{
     const keys = Object.keys(vars);
@@ -724,6 +757,16 @@ function ktMatchedNotes(style, vars){
 function renderKtInputs(preserveState){
   const el = document.getElementById('ktInputsRow');
   const fields = ktActiveFields();
+  const sel = ktFindStyleById(ktSelectedId);
+  const locked = ktIsLocked(sel);
+  const lockBox = document.getElementById('ktLockBox');
+  const lockBoxText = document.getElementById('ktLockBoxText');
+  if(sel && locked){
+    lockBoxText.textContent = ktLockMessage(sel);
+    lockBox.style.display = 'flex';
+  } else {
+    lockBox.style.display = 'none';
+  }
   const prevVals = {};
   if(preserveState){
     el.querySelectorAll('[data-kt-input]').forEach(inp=>{ prevVals[inp.dataset.ktInput] = inp.value; });
@@ -731,7 +774,7 @@ function renderKtInputs(preserveState){
   el.innerHTML = fields.map((f,i)=>`
     <div class="field">
       <label>${i+1}. ${f.label}</label>
-      <input type="number" id="kt-input-${f.key}" data-kt-input="${f.key}" placeholder="0" value="${preserveState && prevVals[f.key] ? prevVals[f.key].replace(/"/g,'&quot;') : ''}">
+      <input type="number" id="kt-input-${f.key}" data-kt-input="${f.key}" placeholder="0" value="${preserveState && prevVals[f.key] ? prevVals[f.key].replace(/"/g,'&quot;') : ''}" ${locked ? 'disabled' : ''}>
     </div>
   `).join('');
   el.querySelectorAll('[data-kt-input]').forEach(inp=>{
@@ -924,7 +967,7 @@ function renderKtStyleList(){
         <span class="kt-style-name">${s.name}</span>
       </div>
       <div style="display:flex; align-items:center; gap:8px;">
-        ${ktIsReady(s) ? '' : '<span class="kt-style-badge">chưa có công thức</span>'}
+        ${!ktIsReady(s) ? '<span class="kt-style-badge kt-badge-lock">🔒 chưa có công thức</span>' : (s.formulaUnverified ? '<span class="kt-style-badge kt-badge-lock">🔒 chưa chuẩn</span>' : '')}
         ${isEditor ? `<div class="kt-style-actions"><button class="kt-icon-btn" data-edit="${s.id}" title="Sửa">✎</button></div>` : ''}
       </div>
     </div>
@@ -1080,10 +1123,12 @@ function ktCompute(){
   headText.textContent = onePiece ? 'Khổ trải · Túi nối' : 'Khổ trải';
   updateKtBreadcrumb();
   if(!sel){ body.innerHTML = '<div class="empty">Chọn kiểu mẫu và nhập kích thước để tính khổ trải.</div>'; ktLastResultText=''; updateKtCopyBtn(); return; }
+  if(ktIsLocked(sel)){
+    body.innerHTML = `<div class="empty">🔒 ${ktLockMessage(sel)}</div>`;
+    ktLastResultText=''; updateKtCopyBtn(); return;
+  }
   if(onePiece){
     if(!ktIsOnePieceReady(sel)){ body.innerHTML = `<div class="empty">Kiểu "${sel.name}" chưa có công thức "Túi nối". ${currentRole==='editor' ? 'Bấm ✎ để nhập công thức.' : ''}</div>`; ktLastResultText=''; updateKtCopyBtn(); return; }
-  } else {
-    if(!ktIsReady(sel)){ body.innerHTML = `<div class="empty">Kiểu "${sel.name}" chưa có công thức tính. ${currentRole==='editor' ? 'Bấm ✎ để nhập công thức.' : ''}</div>`; ktLastResultText=''; updateKtCopyBtn(); return; }
   }
   const missing = fields.some(f=>isNaN(vars[f.key]));
   if(missing){ body.innerHTML = `<div class="empty">Nhập đủ ${fields.map(f=>f.label).join(' / ')} để tính.</div>`; ktLastResultText=''; updateKtCopyBtn(); return; }
@@ -1334,6 +1379,7 @@ function openKtModal(ctx){
     ktMName.value = '';
     ktMPartRows = [{ label:'', ngangFormula:'', caoFormula:'', oneNgangFormula:'', oneCaoFormula:'' }];
     ktMNoteRuleRows = [];
+    document.getElementById('ktMFormulaUnverified').checked = false;
     ktMDeleteBtn.style.display = 'none';
     // Kiểu mới: mặc định tick hết ô của danh mục, người dùng bỏ tick ô nào không cần.
     ktMActiveFieldKeys = new Set(ktGetFields(ktMCategory.value).map(f=>f.key));
@@ -1346,6 +1392,7 @@ function openKtModal(ctx){
     ktMName.value = found.name;
     ktMPartRows = found.parts.map(p=>({ label:p.label||'', ngangFormula:p.ngangFormula||'', caoFormula:p.caoFormula||'', oneNgangFormula:p.oneNgangFormula||'', oneCaoFormula:p.oneCaoFormula||'' }));
     ktMNoteRuleRows = (found.noteRules||[]).map(r=>({ field:r.field||'', min: r.min===null||r.min===undefined ? '' : r.min, max: r.max===null||r.max===undefined ? '' : r.max, text:r.text||'' }));
+    document.getElementById('ktMFormulaUnverified').checked = !!found.formulaUnverified;
     ktModalCtx.hadImage = found.hasImage;
     ktMDeleteBtn.style.display = '';
     // Kiểu đã có sẵn: dùng đúng các ô đã được tick lưu trước đó; nếu là dữ liệu cũ chưa từng khai báo
@@ -1467,6 +1514,7 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
     .filter(r=>r.field && r.text);
   if(cleanNoteRules.some(r=>r.min!==null && r.max!==null && r.min > r.max)){ ktSaveStatus.textContent = 'Khoảng "Từ - Đến" của một ghi chú đang bị ngược, hãy kiểm tra lại.'; return; }
   const cleanActiveFields = ktGetFields(ktMCategory.value).map(f=>f.key).filter(k=>ktMActiveFieldKeys.has(k));
+  const cleanFormulaUnverified = document.getElementById('ktMFormulaUnverified').checked;
 
   ktSaveStatus.textContent = 'Đang lưu…';
   const hasNewImage = !!ktModalCtx.currentImage;
@@ -1475,13 +1523,20 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
   try{
     let noteRulesUnsupported = false;
     let activeFieldsUnsupported = false;
+    let formulaUnverifiedUnsupported = false;
     if(ktModalCtx.mode==='new'){
       const id = 'custom-' + Date.now();
       const row = {
         id, category_id: ktMCategory.value, name, parts: cleanParts, note_rules: cleanNoteRules, active_fields: cleanActiveFields,
+        formula_unverified: cleanFormulaUnverified,
         has_image: hasNewImage, image_base64: hasNewImage ? ktModalCtx.currentImage : null,
       };
       let {error} = await sbClient.from('khotrai_styles').insert(row);
+      if(error && /formula_unverified/i.test(error.message||'')){
+        formulaUnverifiedUnsupported = true;
+        delete row.formula_unverified;
+        ({error} = await sbClient.from('khotrai_styles').insert(row));
+      }
       if(error && /active_fields/i.test(error.message||'')){
         activeFieldsUnsupported = true;
         delete row.active_fields;
@@ -1498,11 +1553,17 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
     } else {
       const update = {
         name, parts: cleanParts, note_rules: cleanNoteRules, active_fields: cleanActiveFields,
+        formula_unverified: cleanFormulaUnverified,
         has_image: willHaveImage,
       };
       if(hasNewImage) update.image_base64 = ktModalCtx.currentImage;
       else if(ktModalCtx.removeImage) update.image_base64 = null;
       let {error} = await sbClient.from('khotrai_styles').update(update).eq('id', ktModalCtx.id);
+      if(error && /formula_unverified/i.test(error.message||'')){
+        formulaUnverifiedUnsupported = true;
+        delete update.formula_unverified;
+        ({error} = await sbClient.from('khotrai_styles').update(update).eq('id', ktModalCtx.id));
+      }
       if(error && /active_fields/i.test(error.message||'')){
         activeFieldsUnsupported = true;
         delete update.active_fields;
@@ -1517,7 +1578,7 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
       delete ktImageCache[ktModalCtx.id];
     }
     await loadAll();
-    const missingCols = [noteRulesUnsupported && 'note_rules', activeFieldsUnsupported && 'active_fields'].filter(Boolean);
+    const missingCols = [noteRulesUnsupported && 'note_rules', activeFieldsUnsupported && 'active_fields', formulaUnverifiedUnsupported && 'formula_unverified'].filter(Boolean);
     ktSaveStatus.textContent = missingCols.length
       ? `Đã lưu (thiếu cột trên Supabase: ${missingCols.join(', ')} — xem ghi chú SQL cần chạy thêm).`
       : 'Đã lưu.';
@@ -1529,7 +1590,7 @@ document.getElementById('ktMSaveBtn').addEventListener('click', async ()=>{
     setTimeout(closeKtModal, missingCols.length ? 2200 : 250);
   }catch(e){
     console.error('save khotrai style:', e);
-    ktSaveStatus.textContent = 'Lỗi khi lưu. (Cột note_rules / active_fields đã được tạo trên bảng khotrai_styles chưa?)';
+    ktSaveStatus.textContent = 'Lỗi khi lưu. (Cột note_rules / active_fields / formula_unverified đã được tạo trên bảng khotrai_styles chưa?)';
   }
 });
 
