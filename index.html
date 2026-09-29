@@ -173,6 +173,10 @@
   .kt-switch-opt.active:hover{ color:var(--white); }
 
   .kt-result{ margin-top:14px; border:none; border-radius:var(--radius-sm); overflow:hidden; background:var(--surface-alt); }
+  .kt-result + .kt-result{ margin-top:10px; }
+  .kt-dim-text{ font-family:'Inter', sans-serif; font-weight:800; font-size:22px; letter-spacing:-0.01em; color:var(--ink); line-height:1.35; word-break:break-word; }
+  .kt-dim-text .kt-dim-tag{ font-size:14px; font-weight:700; color:var(--red); }
+  .kt-dim-text .kt-dim-x{ font-size:16px; font-weight:600; color:var(--ink-faint); margin:0 4px; }
   .kt-result-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:transparent; color:var(--ink); padding:13px 14px 6px; font-family:'Inter', sans-serif; font-size:13px; font-weight:700; text-transform:none; letter-spacing:0; }
   .kt-copy-btn{ display:flex; align-items:center; gap:5px; font-family:'Inter', sans-serif; text-transform:none; letter-spacing:0; font-size:12px; font-weight:700; padding:7px 12px; border-radius:var(--radius-sm); border:1px solid var(--line); background:var(--white); color:var(--ink); cursor:pointer; transition:background .15s; }
   .kt-copy-btn:hover{ background:var(--surface-alt); border-color:var(--ink-faint); }
@@ -297,6 +301,15 @@
               <div class="kt-switch" id="ktOnePieceSwitch">
                 <button type="button" class="kt-switch-opt active" data-val="0">Bình thường</button>
                 <button type="button" class="kt-switch-opt" data-val="1">Túi nối</button>
+              </div>
+            </div>
+            <div class="kt-result" id="ktDimResult">
+              <div class="kt-result-head">
+                <span>Kích thước (N x H x C)</span>
+                <button class="kt-copy-btn" id="ktCopyDimBtn" type="button" disabled title="Sao chép kích thước">⧉ Sao chép</button>
+              </div>
+              <div class="kt-result-body" id="ktDimBody">
+                <div class="empty">Nhập đủ kích thước để hiển thị.</div>
               </div>
             </div>
             <div class="kt-result">
@@ -541,6 +554,7 @@ function ktNormalizeSearch(str){
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/đ/g,'d');
 }
+let ktLastDimText = ''; // kích thước dạng "100(N) x 50(H) x 200(C)", dùng cho nút "Sao chép" của dòng Kích thước
 let ktLastResultText = ''; // kết quả khổ trải dạng text, dùng cho nút "Sao chép"
 let ktModalCtx = null; // { mode:'new'|'edit', id?, categoryId, currentImage, removeImage }
 let ktCatModalCtx = null; // { mode:'new'|'edit', id? }
@@ -867,6 +881,31 @@ document.getElementById('ktCopyResultBtn').addEventListener('click', async ()=>{
     showToast('Không thể sao chép, hãy thử lại');
   }
 });
+document.getElementById('ktCopyDimBtn').addEventListener('click', async ()=>{
+  if(!ktLastDimText) return;
+  try{
+    await navigator.clipboard.writeText(ktLastDimText);
+    showToast('Đã sao chép kích thước');
+  }catch(e){
+    showToast('Không thể sao chép, hãy thử lại');
+  }
+});
+/* Dòng "Kích thước": hiển thị theo thứ tự Ngang x Hông x Cao — giá trị(N) x giá trị(H) x giá trị(C). */
+function ktRenderDim(vars){
+  const body = document.getElementById('ktDimBody');
+  const btn = document.getElementById('ktCopyDimBtn');
+  const tags = [['n','N'],['h','H'],['c','C']];
+  const items = vars ? tags.filter(([k])=>Object.prototype.hasOwnProperty.call(vars,k) && !isNaN(vars[k])) : [];
+  if(!items.length){
+    ktLastDimText = '';
+    body.innerHTML = '<div class="empty">Nhập đủ kích thước để hiển thị.</div>';
+    btn.disabled = true;
+    return;
+  }
+  ktLastDimText = items.map(([k,t])=>`${vars[k]}(${t})`).join(' x ') + 'mm';
+  body.innerHTML = `<div class="kt-dim-text">` + items.map(([k,t])=>`${vars[k]}<span class="kt-dim-tag">(${t})</span>`).join('<span class="kt-dim-x">x</span>') + `<span class="kt-dim-tag">mm</span></div>`;
+  btn.disabled = false;
+}
 function ktReadInputs(){
   const fields = ktActiveFields();
   const vars = {};
@@ -1122,6 +1161,7 @@ function ktCompute(){
   const onePiece = ktOnePieceOn && ktActiveCategory === 'tui-giay';
   headText.textContent = onePiece ? 'Khổ trải · Túi nối' : 'Khổ trải';
   updateKtBreadcrumb();
+  ktRenderDim(null);
   if(!sel){ body.innerHTML = '<div class="empty">Chọn kiểu mẫu và nhập kích thước để tính khổ trải.</div>'; ktLastResultText=''; updateKtCopyBtn(); return; }
   if(ktIsLocked(sel)){
     body.innerHTML = `<div class="empty">🔒 ${ktLockMessage(sel)}</div>`;
@@ -1156,6 +1196,7 @@ function ktCompute(){
       <div class="kt-note-box"><span class="kt-note-icon">⚠</span><span>${n.text.replace(/</g,'&lt;')}</span></div>
     `).join(''));
   }
+  ktRenderDim(vars);
   body.innerHTML = lines.join('');
   ktLastResultText = textLines.join('\n');
   updateKtCopyBtn();
