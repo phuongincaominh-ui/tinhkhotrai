@@ -204,6 +204,15 @@
   .kt-note-rule-row .row{ margin-bottom:0; }
   .kt-note-rule-row .field{ min-width:110px; }
   .kt-note-rule-row .field.kt-noterule-text{ min-width:180px; flex:2; }
+  .kt-input-pick{ cursor:pointer; }
+  .kt-thick-preview{ font-size:12.5px; line-height:1.7; background:var(--surface-alt); border-radius:var(--radius-sm); padding:10px 13px; color:var(--ink-soft); }
+  .kt-thick-preview b{ color:var(--ink); }
+  .kt-thick-check{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer; user-select:none; }
+  .kt-thick-check input{ width:auto; margin:0; accent-color:var(--red); }
+  .kt-thick-radios{ display:flex; gap:8px; flex-wrap:wrap; }
+  .kt-thick-radios label{ display:flex; align-items:center; gap:6px; padding:8px 13px; border:1px solid var(--line); border-radius:100px; background:var(--surface-alt); cursor:pointer; font-size:13px; font-weight:600; user-select:none; }
+  .kt-thick-radios input{ width:auto; margin:0; accent-color:var(--red); }
+  .kt-thick-error{ font-size:12px; color:var(--red-dark); font-weight:600; display:none; }
   .kt-modal-overlay{ position:fixed; inset:0; background:rgba(20,20,25,.45); display:none; align-items:center; justify-content:center; z-index:1000; padding:20px; }
   .kt-modal-overlay.open{ display:flex; }
   .kt-modal{ background:var(--white); border-radius:20px; width:100%; max-width:460px; max-height:88vh; overflow-y:auto; box-shadow:var(--shadow-md); }
@@ -350,6 +359,43 @@
       <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
         <button class="btn-ghost" id="loginModalCancelBtn">Hủy</button>
         <button class="btn-stamp" id="btnLogin">Đăng nhập</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: tính độ dày ruột (mở khi bấm vào ô "Độ dày ruột") -->
+<div class="kt-modal-overlay" id="thickModalOverlay">
+  <div class="kt-modal" style="max-width:380px;">
+    <div class="kt-modal-head">
+      <h3>Tính độ dày ruột</h3>
+      <button class="kt-modal-close" id="thickModalCloseBtn" type="button">&times;</button>
+    </div>
+    <div class="kt-modal-body">
+      <div class="field">
+        <label>Số tờ ruột (bắt buộc nhập)</label>
+        <input type="number" id="thickSheets" min="1" step="1" placeholder="vd: 20">
+        <div class="kt-thick-error" id="thickError"></div>
+      </div>
+      <div class="field">
+        <label>Chất liệu ruột</label>
+        <select id="thickMaterial"></select>
+        <label class="kt-thick-check"><input type="checkbox" id="thickCanMo"> Cán mờ (+0.05mm/tờ)</label>
+      </div>
+      <div class="field">
+        <label>Chất liệu bìa</label>
+        <div class="kt-thick-radios" id="thickCover">
+          <label><input type="radio" name="thickCoverMat" value="Decal" checked> Decal</label>
+          <label><input type="radio" name="thickCoverMat" value="Canvas"> Canvas (+3mm)</label>
+          <label><input type="radio" name="thickCoverMat" value="Da"> Da (+3mm)</label>
+        </div>
+      </div>
+      <div class="kt-thick-preview" id="thickPreview">Nhập số tờ ruột để xem kết quả.</div>
+    </div>
+    <div class="kt-modal-footer">
+      <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
+        <button class="btn-ghost" id="thickCancelBtn" type="button">Hủy</button>
+        <button class="btn-stamp" id="thickOkBtn" type="button">Điền vào ô</button>
       </div>
     </div>
   </div>
@@ -793,6 +839,17 @@ function renderKtInputs(preserveState){
   `).join('');
   el.querySelectorAll('[data-kt-input]').forEach(inp=>{
     inp.addEventListener('input', ktCompute);
+  });
+  // Ô "Độ dày ruột": bấm vào sẽ mở hộp thoại nhập Số tờ ruột + Chất liệu ruột
+  fields.forEach(f=>{
+    if(!ktIsThicknessField(f) || locked) return;
+    const inp = document.getElementById('kt-input-'+f.key);
+    if(!inp) return;
+    inp.readOnly = true;
+    inp.classList.add('kt-input-pick');
+    inp.placeholder = 'Bấm để nhập';
+    inp.addEventListener('click', ()=> thickOpen(inp));
+    inp.addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); thickOpen(inp); } });
   });
   if(!preserveState){
     ktOnePieceOn = false;
@@ -1894,6 +1951,99 @@ document.getElementById('btnLogout').addEventListener('click', async ()=>{
   updateAuthHeader();
   refreshAfterRoleChange();
   showToast('Đã đăng xuất, chuyển sang chế độ chỉ xem');
+});
+
+/* ---------- ĐỘ DÀY RUỘT: hộp thoại tính từ Số tờ ruột + Chất liệu ruột ----------
+   Dữ liệu chất liệu & công thức lấy từ file MenuChuan.jsx (MATERIALS_LIB + công thức độ hở giữa 2 gáy):
+     Độ dày tổng = (độ dày chất liệu + 0.05 nếu cán mờ) x số tờ
+     Độ hở giữa 2 gáy = Độ dày tổng + 7mm + (0 nếu bìa Decal, 3mm nếu Canvas/Da)
+     Giá trị điền vào ô: nếu độ hở <= 10 thì điền 10; nếu > 10 thì điền số nguyên làm tròn lên (ceil). */
+const THICK_MATERIALS = [
+  { name:'C200', t:0.198 }, { name:'C250', t:0.252 }, { name:'C300', t:0.310 },
+  { name:'PVC180', t:0.13 }, { name:'PVC210', t:0.15 }, { name:'PVC280', t:0.20 }, { name:'PVC300', t:0.22 },
+  { name:'Giấy bột đá 150', t:0.15 }, { name:'Giấy bột đá 200', t:0.20 }, { name:'Giấy bột đá 300', t:0.30 },
+  { name:'Giấy bột đá 350', t:0.35 }, { name:'Giấy bột đá 400', t:0.40 }
+];
+const THICK_CAN_MO_EXTRA = 0.05; // mm/tờ - cộng thêm nếu cán mờ
+const THICK_COVER_EXTRA = 3;     // mm - cộng thêm nếu bìa là Canvas hoặc Da
+const THICK_GAP_EXTRA = 7;
+const THICK_GAP_MIN = 10;        // mm - độ hở giữa 2 gáy mặc định/tối thiểu (công thức ra <= 10 thì điền 10) // mm - cộng thêm cố định trong công thức độ hở giữa 2 gáy
+let thickTargetInput = null;
+let thickLast = { sheets:'', materialIndex:0, canMo:false, cover:'Decal' }; // nhớ lại lần nhập trước
+
+function ktIsThicknessField(f){
+  return ktNormalizeSearch(f && f.label).replace(/\s+/g,' ').trim() === 'do day ruot';
+}
+function thickCalc(){
+  const sheets = parseInt(document.getElementById('thickSheets').value, 10);
+  const mat = THICK_MATERIALS[document.getElementById('thickMaterial').selectedIndex] || THICK_MATERIALS[0];
+  if(isNaN(sheets) || sheets <= 0) return null;
+  const canMo = document.getElementById('thickCanMo').checked;
+  const coverEl = document.querySelector('input[name="thickCoverMat"]:checked');
+  const cover = coverEl ? coverEl.value : 'Decal';
+  const perSheet = mat.t + (canMo ? THICK_CAN_MO_EXTRA : 0);
+  const total = perSheet * sheets;
+  const coverExtra = cover === 'Decal' ? 0 : THICK_COVER_EXTRA;
+  const gap = total + THICK_GAP_EXTRA + coverExtra;                 // độ hở tối thiểu theo công thức
+  // Công thức <= 10 -> điền 10; > 10 -> điền số nguyên làm tròn LÊN (giống MenuChuan: "cần độ hở gáy >= ceil")
+  const fill = Math.max(THICK_GAP_MIN, Math.ceil(Math.round(gap * 1e6) / 1e6));
+  return { sheets, mat, canMo, cover, perSheet, total, coverExtra, gap, fill };
+}
+function thickUpdatePreview(){
+  const box = document.getElementById('thickPreview');
+  const r = thickCalc();
+  if(!r){ box.textContent = 'Nhập số tờ ruột để xem kết quả.'; return; }
+  box.innerHTML = `${r.mat.name}${r.canMo ? ' + cán mờ' : ''}: ${r.perSheet.toFixed(3)} mm/tờ × ${r.sheets} tờ = <b>${r.total.toFixed(3)} mm</b><br>`
+    + `Độ hở giữa 2 gáy = ${r.total.toFixed(3)} + ${THICK_GAP_EXTRA}` + (r.coverExtra ? ` + ${r.coverExtra} (bìa ${r.cover})` : '') + ` = <b>${r.gap.toFixed(2)} mm</b><br>`
+    + (r.gap <= THICK_GAP_MIN
+        ? `Không vượt ${THICK_GAP_MIN} → điền <b>${r.fill} mm</b>`
+        : `Vượt ${THICK_GAP_MIN} → làm tròn lên, điền <b>${r.fill} mm</b>`);
+}
+function thickOpen(inp){
+  thickTargetInput = inp;
+  const sel = document.getElementById('thickMaterial');
+  if(!sel.options.length){
+    sel.innerHTML = THICK_MATERIALS.map(m=>`<option>${m.name} (${m.t}mm/tờ)</option>`).join('');
+  }
+  document.getElementById('thickSheets').value = thickLast.sheets;
+  sel.selectedIndex = thickLast.materialIndex;
+  document.getElementById('thickCanMo').checked = thickLast.canMo;
+  document.querySelectorAll('input[name="thickCoverMat"]').forEach(r=>{ r.checked = (r.value === thickLast.cover); });
+  document.getElementById('thickError').style.display = 'none';
+  thickUpdatePreview();
+  document.getElementById('thickModalOverlay').classList.add('open');
+  setTimeout(()=>document.getElementById('thickSheets').focus(), 30);
+}
+function thickClose(){
+  document.getElementById('thickModalOverlay').classList.remove('open');
+  thickTargetInput = null;
+}
+function thickConfirm(){
+  const r = thickCalc();
+  const err = document.getElementById('thickError');
+  if(!r){
+    err.textContent = 'Vui lòng nhập Số tờ ruột (bắt buộc, số nguyên lớn hơn 0).';
+    err.style.display = 'block';
+    document.getElementById('thickSheets').focus();
+    return;
+  }
+  thickLast = { sheets: String(r.sheets), materialIndex: document.getElementById('thickMaterial').selectedIndex, canMo: r.canMo, cover: r.cover };
+  if(thickTargetInput){
+    thickTargetInput.value = String(r.fill);
+    thickTargetInput.dispatchEvent(new Event('input', { bubbles:true })); // chạy lại ktCompute
+  }
+  thickClose();
+}
+document.getElementById('thickSheets').addEventListener('input', ()=>{ document.getElementById('thickError').style.display='none'; thickUpdatePreview(); });
+document.getElementById('thickMaterial').addEventListener('change', thickUpdatePreview);
+document.getElementById('thickCanMo').addEventListener('change', thickUpdatePreview);
+document.querySelectorAll('input[name="thickCoverMat"]').forEach(r=>r.addEventListener('change', thickUpdatePreview));
+document.getElementById('thickOkBtn').addEventListener('click', thickConfirm);
+document.getElementById('thickCancelBtn').addEventListener('click', thickClose);
+document.getElementById('thickModalCloseBtn').addEventListener('click', thickClose);
+document.getElementById('thickModalOverlay').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); thickConfirm(); }
+  else if(e.key==='Escape'){ thickClose(); }
 });
 
 /* ---------- INIT ---------- */
