@@ -305,6 +305,12 @@
               <span class="kt-lock-icon">🔒</span>
               <span id="ktLockBoxText"></span>
             </div>
+            <div class="kt-onepiece-toggle" id="ktReverseToggle">
+              <div class="kt-switch" id="ktReverseSwitch">
+                <button type="button" class="kt-switch-opt active" data-val="0">Nhập N / C</button>
+                <button type="button" class="kt-switch-opt" data-val="1">Nhập từ ruột</button>
+              </div>
+            </div>
             <div class="row" id="ktInputsRow"></div>
             <div class="kt-onepiece-toggle" id="ktOnePieceToggle">
               <div class="kt-switch" id="ktOnePieceSwitch">
@@ -594,6 +600,32 @@ const ktImageCache = {};
 let ktActiveCategory = null;
 let ktSelectedId = null;
 let ktOnePieceOn = false; // chế độ "Túi nối", chỉ dùng cho danh mục Túi giấy
+/* ---------- MENU GÁY VÍT: chế độ "Nhập từ ruột" (tính ngược) ----------
+   Công thức xuôi của kiểu Menu gáy vít (n = Ngang, c = Cao, r = Độ dày ruột):
+     Mặt ngoài : ngang (n*2)+r+37      | cao c+37
+     Lót trong : ngang (n*2)+r-4       | cao c-4
+     Ruột (luôn gáy): ngang ((n*2)+r)/2-3 | cao c-6
+   Nhập Ruột ngang trải (rn), Ruột cao trải (rc) và r thì suy ngược:
+     n = rn - r/2 + 3   |   c = rc + 6   rồi áp lại công thức Mặt ngoài / Lót trong. */
+let ktReverseOn = false;
+let ktReverseStyleId = null;
+const KT_REVERSE_FIELDS = [
+  { key:'rn', label:'Ruột (luôn gáy) - Ngang trải' },
+  { key:'rc', label:'Ruột (luôn gáy) - Cao trải' },
+  { key:'r',  label:'Độ dày ruột' },
+];
+function ktIsGayVitStyle(style){
+  return !!(style && ktNormalizeSearch(style.name).replace(/\s+/g,' ').includes('gay vit'));
+}
+function ktReverseActive(){
+  return ktReverseOn && ktIsGayVitStyle(ktFindStyleById(ktSelectedId));
+}
+function ktUpdateReverseToggle(){
+  const wrap = document.getElementById('ktReverseToggle');
+  if(!wrap) return;
+  wrap.style.display = ktIsGayVitStyle(ktFindStyleById(ktSelectedId)) ? 'flex' : 'none';
+  document.querySelectorAll('#ktReverseSwitch .kt-switch-opt').forEach(b=>b.classList.toggle('active', (b.dataset.val==='1') === ktReverseOn));
+}
 let ktGlobalSearchQuery = ''; // từ khóa tìm kiếm tổng (danh mục + kiểu mẫu), không phân biệt dấu tiếng Việt
 function ktNormalizeSearch(str){
   return (str||'').toString().toLowerCase()
@@ -793,6 +825,7 @@ function ktFmt(v){ return (Math.round(v*100)/100).toLocaleString('vi-VN'); }
    đã khai báo activeFields (đã tick trong modal) thì chỉ lấy đúng những ô đó; nếu kiểu mẫu chưa
    từng khai báo (dữ liệu cũ) hoặc chưa chọn kiểu nào thì lấy toàn bộ ô của danh mục như trước giờ. */
 function ktActiveFields(){
+  if(ktReverseActive()) return KT_REVERSE_FIELDS;
   const catFields = ktGetFields(ktActiveCategory);
   const sel = ktFindStyleById(ktSelectedId);
   if(!sel) return catFields;
@@ -815,6 +848,8 @@ function ktMatchedNotes(style, vars){
 
 /* ---------- KHỔ TRẢI: ô nhập kích thước động theo từng danh mục ---------- */
 function renderKtInputs(preserveState){
+  if(!preserveState || ktReverseStyleId !== ktSelectedId) ktReverseOn = false; // đổi kiểu / tải lại -> về chế độ nhập thường
+  ktReverseStyleId = ktSelectedId;
   const el = document.getElementById('ktInputsRow');
   const fields = ktActiveFields();
   const sel = ktFindStyleById(ktSelectedId);
@@ -858,6 +893,7 @@ function renderKtInputs(preserveState){
     toggleWrap.style.display = (ktActiveCategory === 'tui-giay') ? 'flex' : 'none';
     document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(b=>b.classList.toggle('active', b.dataset.val==='0'));
   }
+  ktUpdateReverseToggle();
 }
 /* ---------- KHỔ TRẢI: ghi chú đỏ riêng theo từng kiểu mẫu (lưu Supabase, chỉ editor sửa) ---------- */
 function renderKtInputNote(){
@@ -926,6 +962,16 @@ document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(btn=>{
     ktOnePieceOn = btn.dataset.val === '1';
     document.querySelectorAll('#ktOnePieceSwitch .kt-switch-opt').forEach(b=>b.classList.toggle('active', b===btn));
     document.getElementById('ktOnePieceToggle').classList.toggle('active', ktOnePieceOn);
+    ktCompute();
+  });
+});
+document.querySelectorAll('#ktReverseSwitch .kt-switch-opt').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const want = btn.dataset.val === '1';
+    if(want === ktReverseOn) return;
+    ktReverseOn = want;
+    ktUpdateReverseToggle();
+    renderKtInputs(true); // giữ lại giá trị "Độ dày ruột" khi chuyển chế độ
     ktCompute();
   });
 });
@@ -1227,6 +1273,7 @@ function ktCompute(){
   if(onePiece){
     if(!ktIsOnePieceReady(sel)){ body.innerHTML = `<div class="empty">Kiểu "${sel.name}" chưa có công thức "Túi nối". ${currentRole==='editor' ? 'Bấm ✎ để nhập công thức.' : ''}</div>`; ktLastResultText=''; updateKtCopyBtn(); return; }
   }
+  if(ktReverseActive()){ ktComputeReverse(body, headText, fields, vars); return; }
   const missing = fields.some(f=>isNaN(vars[f.key]));
   if(missing){ body.innerHTML = `<div class="empty">Nhập đủ ${fields.map(f=>f.label).join(' / ')} để tính.</div>`; ktLastResultText=''; updateKtCopyBtn(); return; }
   const lines = [];
@@ -1256,6 +1303,33 @@ function ktCompute(){
   ktRenderDim(vars);
   body.innerHTML = lines.join('');
   ktLastResultText = textLines.join('\n');
+  updateKtCopyBtn();
+}
+
+/* Menu gáy vít - tính ngược từ khổ trải "Ruột (luôn gáy)" ra Ngang, Cao, Mặt ngoài, Lót trong. */
+function ktComputeReverse(body, headText, fields, vars){
+  headText.textContent = 'Khổ trải · Tính từ ruột';
+  const setEmpty = (html)=>{ body.innerHTML = `<div class="empty">${html}</div>`; ktLastResultText=''; updateKtCopyBtn(); };
+  if(fields.some(f=>isNaN(vars[f.key]))){ setEmpty('Nhập đủ ' + fields.map(f=>f.label).join(' / ') + ' để tính.'); return; }
+  const { rn, rc, r } = vars;
+  const n = rn - r/2 + 3;
+  const c = rc + 6;
+  if(n <= 0 || c <= 0){ setEmpty('Kích thước tính ra không hợp lệ (Ngang hoặc Cao ≤ 0), kiểm tra lại số nhập.'); return; }
+  const parts = [
+    { label:'Mặt ngoài', w:(n*2)+r+37, h:c+37 },
+    { label:'Lót trong', w:(n*2)+r-4,  h:c-4  },
+  ];
+  const r2 = v => Math.round(v*100)/100;
+  ktRenderDim({ n:r2(n), c:r2(c) });
+  body.innerHTML = parts.map(p=>`
+    <div class="kt-result-line">
+      <div class="kt-result-line-wrap">
+        <span class="kt-result-label">${p.label}</span>
+        <span class="kt-result-num">${ktFmt(p.w)}</span><span class="kt-result-x">×</span><span class="kt-result-num">${ktFmt(p.h)}</span><span class="kt-result-unit">mm</span>
+      </div>
+    </div>
+  `).join('');
+  ktLastResultText = parts.map(p=>`${p.label}: ${ktFmt(p.w)} x ${ktFmt(p.h)}mm`).join('\n');
   updateKtCopyBtn();
 }
 
